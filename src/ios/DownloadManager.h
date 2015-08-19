@@ -50,6 +50,17 @@
 
 - (void)didFinishLoadingAllForManager:(DownloadManager *)downloadManager;
 
+
+/** Informs the delegate that have error when downloading (whether successfully or unsuccessfully).
+ *
+ * @param downloadManager
+ *
+ * The `DownloadManager` that is performing the downloads.
+ *
+ * @see DownloadManager
+ */
+- (void)didErrorLoadingAllForManager:(DownloadManager *)downloadManager;
+
 /** Informs the delegate that a particular download has finished successfully.
  *
  * @param downloadManager

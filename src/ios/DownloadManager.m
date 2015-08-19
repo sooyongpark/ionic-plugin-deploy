@@ -69,7 +69,7 @@
 
 - (void)start
 {
-    [self tryDownloading];
+    [self tryDownloading: true];
 }
 
 - (void)cancelAll
@@ -82,7 +82,7 @@
     
     self.cancelAllInProgress = NO;
     
-    [self informDelegateThatDownloadsAreDone];
+    [self informDelegateThatDownloadsAreDone: false];
 }
 
 #pragma mark - DownloadDelegate Methods
@@ -95,7 +95,7 @@
         [self.delegate downloadManager:self downloadDidFinishLoading:download];
     }
 
-    [self tryDownloading];
+    [self tryDownloading: true];
 }
 
 - (void)downloadDidFail:(Download *)download
@@ -106,7 +106,7 @@
         [self.delegate downloadManager:self downloadDidFail:download];
 
     if (!self.cancelAllInProgress) {
-        [self tryDownloading];
+        [self tryDownloading: false];
     }
 }
 
@@ -119,21 +119,27 @@
 
 #pragma mark - Private methods
 
-- (void)informDelegateThatDownloadsAreDone
+- (void)informDelegateThatDownloadsAreDone:(Boolean) isSuccess
 {
-    if ([self.delegate respondsToSelector:@selector(didFinishLoadingAllForManager:)]) {
-        [self.delegate didFinishLoadingAllForManager:self];
+    if(isSuccess){
+        if ([self.delegate respondsToSelector:@selector(didFinishLoadingAllForManager:)]) {
+            [self.delegate didFinishLoadingAllForManager:self];
+        }
+    }else{
+        if ([self.delegate respondsToSelector:@selector(didErrorLoadingAllForManager:)]) {
+            [self.delegate didErrorLoadingAllForManager:self];
+        }
     }
 }
 
-- (void)tryDownloading
+- (void)tryDownloading:(Boolean) isSuccess
 {
     NSInteger totalDownloads = [self.downloads count];
     
     // if we're done, inform the delegate
     
     if (totalDownloads == 0) {
-        [self informDelegateThatDownloadsAreDone];
+        [self informDelegateThatDownloadsAreDone: isSuccess];
         return;
     }
     
