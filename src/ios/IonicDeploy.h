@@ -18,6 +18,8 @@
 
 - (void) initVersionChecks;
 
+- (void) initialize:(CDVInvokedUrlCommand *)command;
+
 - (void) check:(CDVInvokedUrlCommand *)command;
 
 - (void) download:(CDVInvokedUrlCommand *)command;

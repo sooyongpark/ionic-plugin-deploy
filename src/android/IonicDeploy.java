@@ -160,7 +160,7 @@ public class IonicDeploy extends CordovaPlugin {
     final SharedPreferences prefs = this.prefs;
 
     if (action.equals("initialize")) {
-      // No need to do anything here.
+      this.server = args.getString(1);
       return true;
     } else if (action.equals("check")) {
       logMessage("CHECK", "Checking for updates");

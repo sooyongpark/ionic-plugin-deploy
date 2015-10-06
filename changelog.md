@@ -1,6 +1,11 @@
 Changelog
 =========
 
+## 0.3.1
+
+* Updated the Download Manager (https://github.com/robertmryan/download-manager)
+* Deploy service url is now pulled from the platform config
+
 ## 0.3.0
 
 * Changed plugin id from `com.ionic.deploy` to `ionic-plugin-deploy`

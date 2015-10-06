@@ -20,6 +20,7 @@
 @property NSString *currentUUID;
 @property dispatch_queue_t serialQueue;
 @property NSString *cordova_js_resource;
+@property NSString *deploy_server;
 
 @end
 
@@ -101,6 +102,10 @@ typedef struct JsonHttpResponse {
 - (void) onReset {
     // redirect to latest deploy
     [self doRedirect];
+}
+
+- (void) initialize:(CDVInvokedUrlCommand *)command {
+    self.deploy_server = [command.arguments objectAtIndex:1];
 }
 
 - (void) check:(CDVInvokedUrlCommand *)command {
@@ -297,7 +302,7 @@ typedef struct JsonHttpResponse {
 }
 
 - (struct JsonHttpResponse) postDeviceDetails {
-    NSString *baseUrl = @"https://apps.ionic.io";
+    NSString *baseUrl = self.deploy_server;
     NSString *endpoint = [NSString stringWithFormat:@"/api/v1/apps/%@/updates/check/", self.appId];
     NSString *url = [NSString stringWithFormat:@"%@%@", baseUrl, endpoint];
     NSDictionary* headers = @{@"Content-Type": @"application/json", @"accept": @"application/json"};
