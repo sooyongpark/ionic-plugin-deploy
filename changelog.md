@@ -3,7 +3,9 @@ Changelog
 
 ## 0.3.1
 
-* Updated the Download Manager (https://github.com/robertmryan/download-manager)
+* (fix) iOS deploys will now give a download error if the app goes into the background while
+  downloading a deploy.
+* Exluding deploys for iOS device backups
 * Deploy service url is now pulled from the platform config
 
 ## 0.3.0
