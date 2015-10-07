@@ -469,6 +469,14 @@ typedef struct JsonHttpResponse {
     [self.commandDelegate sendPluginResult:pluginResult callbackId:self.callbackId];
 }
 
+- (void)didErrorLoadingAllForManager:(DownloadManager *)downloadManager{
+    NSLog(@"Download Error");
+    CDVPluginResult* pluginResult = nil;
+    pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"download error"];
+    
+    [self.commandDelegate sendPluginResult:pluginResult callbackId:self.callbackId];
+}
+
 - (void)didFinishLoadingAllForManager:(DownloadManager *)downloadManager
 {
     // Save the upstream_uuid (what we just downloaded) to the uuid preference
