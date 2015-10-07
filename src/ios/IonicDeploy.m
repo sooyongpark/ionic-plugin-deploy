@@ -236,6 +236,7 @@ typedef struct JsonHttpResponse {
         NSLog(@"Unzipping...");
 
         [SSZipArchive unzipFileAtPath:filePath toDestination:extractPath delegate:self];
+        [self excludeVersionFromBackup:uuid];
         [self updateVersionLabel:NOTHING_TO_IGNORE];
         BOOL success = [[NSFileManager defaultManager] removeItemAtPath:filePath error:nil];
         NSLog(@"Unzipped...");
@@ -435,6 +436,23 @@ typedef struct JsonHttpResponse {
         [prefs setObject:versions forKey:@"my_versions"];
         [prefs synchronize];
     }
+}
+
+- (BOOL) excludeVersionFromBackup:(NSString *) uuid {
+    NSArray *paths = NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, YES);
+    NSString *libraryDirectory = [paths objectAtIndex:0];
+
+    NSString *pathToFolder = [NSString stringWithFormat:@"%@/%@", libraryDirectory, uuid];
+    NSURL *URL= [NSURL fileURLWithPath:pathToFolder];
+
+    NSError *error = nil;
+    BOOL success = [URL setResourceValue:[NSNumber numberWithBool: YES] forKey: NSURLIsExcludedFromBackupKey error: &error];
+    if(!success){
+        NSLog(@"Error excluding %@ from backup %@", [URL lastPathComponent], error);
+    } else {
+        NSLog(@"Excluding %@ from backup", pathToFolder);
+    }
+    return success;
 }
 
 - (void) removeVersion:(NSString *) uuid {

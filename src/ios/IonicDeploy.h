@@ -42,5 +42,7 @@
 
 - (void) removeVersion:(NSString *) uuid;
 
+- (BOOL) excludeVersionFromBackup:(NSString *) uuid;
+
 @end
 
