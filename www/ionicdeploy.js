@@ -52,6 +52,24 @@ var IonicDeploy = {
       'info',
       [app_id]
     );
+  },
+  getVersions: function(app_id, success, failure) {
+    cordova.exec(
+      success,
+      failure,
+      'IonicDeploy',
+      'getVersions',
+      [app_id]
+    );
+  },
+  deleteVersion: function(app_id, version, success, failure) {
+    cordova.exec(
+      success,
+      failure,
+      'IonicDeploy',
+      'deleteVersion',
+      [app_id, version]
+    );
   }
 }
 

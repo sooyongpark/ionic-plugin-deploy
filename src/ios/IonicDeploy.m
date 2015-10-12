@@ -265,6 +265,10 @@ typedef struct JsonHttpResponse {
     [self.commandDelegate sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:json] callbackId:command.callbackId];
 }
 
+- (void) getVersions:(CDVInvokedUrlCommand *)command {
+    [self.commandDelegate sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsArray:[self getDeployVersions]] callbackId:command.callbackId];
+}
+
 
 - (void) doRedirect {
     NSUserDefaults *prefs = [NSUserDefaults standardUserDefaults];
@@ -369,6 +373,37 @@ typedef struct JsonHttpResponse {
     return versions;
 }
 
+- (NSMutableArray *) getDeployVersions {
+    NSArray *versions = [self getMyVersions];
+    NSMutableArray *deployVersions = [[NSMutableArray alloc] initWithCapacity:5];
+    
+    for (id version in versions) {
+        NSArray *version_parts = [version componentsSeparatedByString:@"|"];
+        NSString *version_uuid = version_parts[1];
+        [deployVersions addObject:version_uuid];
+    }
+
+    return deployVersions;
+}
+
+- (void) removeVersionFromPreferences:(NSString *) uuid {
+    NSUserDefaults *prefs = [NSUserDefaults standardUserDefaults];
+    NSArray *versions = [self getMyVersions];
+    NSMutableArray *newVersions = [[NSMutableArray alloc] initWithCapacity:5];
+    
+    for (id version in versions) {
+        NSArray *version_parts = [version componentsSeparatedByString:@"|"];
+        NSString *version_uuid = version_parts[1];
+        if (![version_uuid isEqualToString:uuid]) {
+            [newVersions addObject:version_uuid];
+        }
+    }
+
+    [prefs setObject:newVersions forKey:@"my_versions"];
+    [prefs synchronize];
+}
+
+
 - (bool) hasVersion:(NSString *) uuid {
     NSArray *versions = [self getMyVersions];
 
@@ -385,6 +420,19 @@ typedef struct JsonHttpResponse {
     }
 
     return false;
+}
+
+- (void) deleteVersion:(CDVInvokedUrlCommand *)command {
+    NSString *uuid = [command.arguments objectAtIndex:1];
+    BOOL success = [self removeVersion:uuid];
+    CDVPluginResult *pluginResult = nil;
+
+    if (success) {
+        pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
+    } else {
+        pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"Unable to delete the deploy version"];
+    }
+    [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
 }
 
 - (void) saveVersion:(NSString *) uuid {
@@ -455,15 +503,27 @@ typedef struct JsonHttpResponse {
     return success;
 }
 
-- (void) removeVersion:(NSString *) uuid {
+- (BOOL) removeVersion:(NSString *) uuid {
+    NSUserDefaults *prefs = [NSUserDefaults standardUserDefaults];
+    NSString *currentUUID = [self getUUID];
     NSArray *paths = NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, YES);
     NSString *libraryDirectory = [paths objectAtIndex:0];
 
     NSString *pathToFolder = [NSString stringWithFormat:@"%@/%@/", libraryDirectory, uuid];
 
+    if ([uuid isEqualToString: currentUUID]) {
+        [prefs setObject: @"" forKey: @"uuid"];
+        [prefs synchronize];
+    }
+
     BOOL success = [[NSFileManager defaultManager] removeItemAtPath:pathToFolder error:nil];
 
+    if(success) {
+        [self removeVersionFromPreferences:uuid];
+    }
+
     NSLog(@"Removed Version %@ success? %d", uuid, success);
+    return success;
 }
 
 /* Delegate Methods for the DownloadManager */

@@ -34,13 +34,19 @@
 
 - (NSMutableArray *) getMyVersions;
 
+- (NSMutableArray *) getDeployVersions;
+
+- (void) getVersions:(CDVInvokedUrlCommand *)command;
+
 - (bool) hasVersion:(NSString *) uuid;
 
 - (void) saveVersion:(NSString *) uuid;
 
+- (void) deleteVersion:(CDVInvokedUrlCommand *)command;
+
 - (void) cleanupVersions;
 
-- (void) removeVersion:(NSString *) uuid;
+- (BOOL) removeVersion:(NSString *) uuid;
 
 - (BOOL) excludeVersionFromBackup:(NSString *) uuid;
 

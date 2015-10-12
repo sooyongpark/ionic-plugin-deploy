@@ -195,6 +195,18 @@ public class IonicDeploy extends CordovaPlugin {
     } else if (action.equals("info")) {
       this.info(callbackContext);
       return true;
+    } else if (action.equals("getVersions")) {
+      callbackContext.success(this.getDeployVersions());
+      return true;
+    } else if (action.equals("deleteVersion")) {
+      final String uuid = args.getString(1);
+      boolean status = this.removeVersion(uuid);
+      if (status) {
+        callbackContext.success();
+      } else {
+        callbackContext.error("Error attempting to remove the version, are you sure it exists?");
+      }
+      return true;
     } else {
       return false;
     }
@@ -297,6 +309,17 @@ public class IonicDeploy extends CordovaPlugin {
     return prefs.getStringSet("my_versions", new HashSet<String>());
   }
 
+
+  private JSONArray getDeployVersions() {
+    Set<String> versions = this.getMyVersions();
+    JSONArray deployVersions = new JSONArray();
+    for (String version : versions) {
+      String[] version_string = version.split("\\|");
+      deployVersions.put(version_string[0]);
+    }
+    return deployVersions;
+  }
+
   /**
    * Check to see if we already have the version to be downloaded
    *
@@ -370,23 +393,47 @@ public class IonicDeploy extends CordovaPlugin {
     }
   }
 
+  private void removeVersionFromPreferences(String uuid) {
+    SharedPreferences prefs = this.prefs;
+    Set<String> versions = this.getMyVersions();
+    Set<String> newVersions = new HashSet<String>();
+
+    for (String version : versions) {
+      String[] version_string = version.split("\\|");
+      String tempUUID = version_string[0];
+      if (!tempUUID.equals(uuid)) {
+        newVersions.add(version);
+      }
+      prefs.edit().putStringSet("my_versions", newVersions).apply();
+    }
+  }
+
+
   /**
-   * Ugly, lazy bit of code to whack old version directories...
+   * Remove a deploy version from the device
    *
    * @param uuid
+   * @return boolean Success or failure
    */
-  private void removeVersion(String uuid) {
+  private boolean removeVersion(String uuid) {
+    if (uuid.equals(this.getUUID())) {
+      SharedPreferences prefs = this.prefs;
+      prefs.edit().putString("uuid", "").apply();
+      prefs.edit().putString("loaded_uuid", "").apply();
+    }
     File versionDir = this.myContext.getDir(uuid, Context.MODE_PRIVATE);
-
     if (versionDir.exists()) {
       String deleteCmd = "rm -r " + versionDir.getAbsolutePath();
       Runtime runtime = Runtime.getRuntime();
       try {
         runtime.exec(deleteCmd);
+        removeVersionFromPreferences(uuid);
+        return true;
       } catch (IOException e) {
         logMessage("REMOVE", "Failed to remove " + uuid + ". Error: " + e.getMessage());
       }
     }
+    return false;
   }
 
   private JsonHttpResponse postDeviceDetails(String uuid, final String channel_tag) {

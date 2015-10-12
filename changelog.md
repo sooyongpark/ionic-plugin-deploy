@@ -1,12 +1,14 @@
 Changelog
 =========
 
-## 0.3.1
+## 0.4.0
 
+* Added `getVersions` and `removeVersion` methods. They will allow you to manage the deploys 
+  currently on the device.
 * (fix) iOS deploys will now give a download error if the app goes into the background while
   downloading a deploy.
-* Exluding deploys for iOS device backups
-* Deploy service url is now pulled from the platform config
+* (fix) Excluding deploys from iOS cloud backups
+
 
 ## 0.3.0
 
