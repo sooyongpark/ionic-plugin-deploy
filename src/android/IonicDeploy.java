@@ -207,9 +207,63 @@ public class IonicDeploy extends CordovaPlugin {
         callbackContext.error("Error attempting to remove the version, are you sure it exists?");
       }
       return true;
+    } else if (action.equals("getMetadata")) {
+      String uuid = null;
+      try {
+        uuid = args.getString(1);
+      } catch (JSONException e) {
+        uuid = this.prefs.getString("upstream_uuid", "");
+      }
+
+      if (uuid.equals("null")) {
+        uuid = this.prefs.getString("upstream_uuid", "");
+      }
+
+      if(uuid == null || uuid.equals("")) {
+        callbackContext.error("NO_DEPLOY_UUID_AVAILABLE");
+      } else {
+        final String metadata_uuid = uuid;
+        this.getMetadata(callbackContext, metadata_uuid);  
+      }
+      return true;
     } else {
       return false;
     }
+  }
+
+  private JSONObject getMetadata(CallbackContext callbackContext, final String uuid) {
+    String endpoint = "/api/v1/apps/" + this.app_id + "/updates/" + uuid + "/";
+    JsonHttpResponse response = new JsonHttpResponse();
+    JSONObject json = new JSONObject();
+    HttpURLConnection urlConnection = null;
+
+    String result = "{}";
+    try {
+      URL url = new URL(this.server + endpoint);
+      urlConnection = (HttpURLConnection) url.openConnection();
+      InputStream in = new BufferedInputStream(urlConnection.getInputStream());
+      result = readStream(in);
+    } catch (MalformedURLException e) {
+      callbackContext.error("DEPLOY_HTTP_ERROR");
+      response.error = true;
+    } catch (IOException e) {
+      callbackContext.error("DEPLOY_HTTP_ERROR");
+      response.error = true;
+    }
+
+    if (urlConnection != null) {
+      urlConnection.disconnect();
+    }
+
+    JSONObject jsonResponse = null;
+    try {
+      jsonResponse = new JSONObject(result);
+      callbackContext.success(jsonResponse);
+    } catch (JSONException e) {
+      response.error = true;
+      callbackContext.error("There was an error fetching the metadata");
+    }
+    return jsonResponse;
   }
 
   private void info(CallbackContext callbackContext) {
