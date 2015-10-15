@@ -9,6 +9,7 @@ Changelog
 * (fix) iOS deploys will now give a download error if the app goes into the background while
   downloading a deploy.
 * (fix) Excluding deploys from iOS cloud backups
+* (fix) iOS rollbacks now behave the same as android
 
 
 ## 0.3.0
