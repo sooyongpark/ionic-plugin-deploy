@@ -188,10 +188,7 @@ typedef struct JsonHttpResponse {
             // Set the current version to the upstream version (we already have this version)
             [prefs setObject:upstream_uuid forKey:@"uuid"];
             [prefs synchronize];
-
-            NSLog(@"redirect");
-
-            [self doRedirect];
+            [self.commandDelegate sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"false"] callbackId:self.callbackId];
         } else {
             NSDictionary *result = self.last_update;
             NSDictionary *update = [result objectForKey:@"update"];
@@ -219,28 +216,33 @@ typedef struct JsonHttpResponse {
 
     dispatch_async(self.serialQueue, ^{
         self.callbackId = command.callbackId;
-
-
         self.ignore_deploy = false;
 
-        NSArray *paths = NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, YES);
-        NSString *libraryDirectory = [paths objectAtIndex:0];
+        NSString *upstream_uuid = [[NSUserDefaults standardUserDefaults] objectForKey:@"upstream_uuid"];
 
-        NSString *uuid = [[NSUserDefaults standardUserDefaults] objectForKey:@"uuid"];
+        if(upstream_uuid != nil && [self hasVersion:upstream_uuid]) {
+            [self updateVersionLabel:NOTHING_TO_IGNORE];
+            [self.commandDelegate sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"done"] callbackId:self.callbackId];
+        } else {
+            NSArray *paths = NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, YES);
+            NSString *libraryDirectory = [paths objectAtIndex:0];
 
-        NSString *filePath = [NSString stringWithFormat:@"%@/%@", libraryDirectory, @"www.zip"];
-        NSString *extractPath = [NSString stringWithFormat:@"%@/%@/", libraryDirectory, uuid];
+            NSString *uuid = [[NSUserDefaults standardUserDefaults] objectForKey:@"uuid"];
 
-        NSLog(@"Path for zip file: %@", filePath);
+            NSString *filePath = [NSString stringWithFormat:@"%@/%@", libraryDirectory, @"www.zip"];
+            NSString *extractPath = [NSString stringWithFormat:@"%@/%@/", libraryDirectory, uuid];
 
-        NSLog(@"Unzipping...");
+            NSLog(@"Path for zip file: %@", filePath);
 
-        [SSZipArchive unzipFileAtPath:filePath toDestination:extractPath delegate:self];
-        [self excludeVersionFromBackup:uuid];
-        [self updateVersionLabel:NOTHING_TO_IGNORE];
-        BOOL success = [[NSFileManager defaultManager] removeItemAtPath:filePath error:nil];
-        NSLog(@"Unzipped...");
-        NSLog(@"Removing www.zip %d", success);
+            NSLog(@"Unzipping...");
+
+            [SSZipArchive unzipFileAtPath:filePath toDestination:extractPath delegate:self];
+            [self saveVersion:upstream_uuid];
+            [self excludeVersionFromBackup:uuid];
+            BOOL success = [[NSFileManager defaultManager] removeItemAtPath:filePath error:nil];
+            NSLog(@"Unzipped...");
+            NSLog(@"Removing www.zip %d", success);
+        }
     });
 }
 
@@ -363,7 +365,6 @@ typedef struct JsonHttpResponse {
         @"device_platform": @"ios",
         @"channel_tag": self.channel_tag
     };
-
 
     UNIHTTPJsonResponse *result = [[UNIRest postEntity:^(UNIBodyRequest *request) {
       [request setUrl:url];
@@ -605,9 +606,6 @@ typedef struct JsonHttpResponse {
     [prefs synchronize];
 
     NSLog(@"UUID is: %@ and upstream_uuid is: %@", uuid, upstream_uuid);
-
-    [self saveVersion:upstream_uuid];
-
     NSLog(@"Download Finished...");
     CDVPluginResult* pluginResult = nil;
     pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"true"];
