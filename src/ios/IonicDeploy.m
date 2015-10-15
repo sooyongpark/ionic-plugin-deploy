@@ -269,6 +269,45 @@ typedef struct JsonHttpResponse {
     [self.commandDelegate sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsArray:[self getDeployVersions]] callbackId:command.callbackId];
 }
 
+- (void) getMetadata:(CDVInvokedUrlCommand *)command {
+    self.appId = [command.arguments objectAtIndex:0];
+    CDVPluginResult *pluginResult = nil;
+    NSString *uuid = [command.arguments objectAtIndex:1];
+    
+    if (uuid == nil || uuid == [NSNull null] || [uuid isEqualToString:@""] || [uuid isEqualToString:@"null"]) {
+        uuid = [[NSUserDefaults standardUserDefaults] objectForKey:@"upstream_uuid"];
+    }
+
+    if (uuid == nil || uuid == [NSNull null] || [uuid isEqualToString:@""] || [uuid isEqualToString:@"null"]) {
+        pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"NO_DEPLOY_UUID_AVAILABLE"];
+    } else {
+        NSString *baseUrl = self.deploy_server;
+        NSString *endpoint = [NSString stringWithFormat:@"/api/v1/apps/%@/updates/%@/", self.appId, uuid];
+        NSString *url = [NSString stringWithFormat:@"%@%@", baseUrl, endpoint];
+        NSDictionary* headers = @{@"Content-Type": @"application/json", @"accept": @"application/json"};
+
+        NSError *httpError = nil;
+
+        UNIHTTPJsonResponse *result = [[UNIRest get:^(UNISimpleRequest *request) {
+            [request setUrl:url];
+            [request setHeaders:headers];
+        }] asJson:&httpError];
+
+        @try {
+            pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:[result.body JSONObject]];
+        }
+        @catch (NSException *exception) {
+            pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"DEPLOY_HTTP_ERROR"];
+        }
+
+        if (httpError || result.code != 200) {
+            pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"DEPLOY_HTTP_ERROR"];
+        }
+    }
+
+    [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+}
+
 
 - (void) doRedirect {
     NSUserDefaults *prefs = [NSUserDefaults standardUserDefaults];

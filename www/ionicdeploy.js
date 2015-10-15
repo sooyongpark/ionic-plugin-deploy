@@ -70,6 +70,15 @@ var IonicDeploy = {
       'deleteVersion',
       [app_id, version]
     );
+  },
+  getMetadata: function(app_id, uuid, success, failure) {
+    cordova.exec(
+      success,
+      failure,
+      'IonicDeploy',
+      'getMetadata',
+      [app_id, uuid]
+    );
   }
 }
 

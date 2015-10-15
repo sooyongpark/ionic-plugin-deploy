@@ -38,6 +38,8 @@
 
 - (void) getVersions:(CDVInvokedUrlCommand *)command;
 
+- (void) getMetadata:(CDVInvokedUrlCommand *)command;
+
 - (bool) hasVersion:(NSString *) uuid;
 
 - (void) saveVersion:(NSString *) uuid;
