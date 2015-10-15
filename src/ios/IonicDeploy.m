@@ -20,6 +20,7 @@
 @property NSString *currentUUID;
 @property dispatch_queue_t serialQueue;
 @property NSString *cordova_js_resource;
+@property NSString *deploy_server;
 
 @end
 
@@ -103,6 +104,10 @@ typedef struct JsonHttpResponse {
     [self doRedirect];
 }
 
+- (void) initialize:(CDVInvokedUrlCommand *)command {
+    self.deploy_server = [command.arguments objectAtIndex:1];
+}
+
 - (void) check:(CDVInvokedUrlCommand *)command {
     self.appId = [command.arguments objectAtIndex:0];
     self.channel_tag = [command.arguments objectAtIndex:1];
@@ -183,10 +188,7 @@ typedef struct JsonHttpResponse {
             // Set the current version to the upstream version (we already have this version)
             [prefs setObject:upstream_uuid forKey:@"uuid"];
             [prefs synchronize];
-
-            NSLog(@"redirect");
-
-            [self doRedirect];
+            [self.commandDelegate sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"false"] callbackId:self.callbackId];
         } else {
             NSDictionary *result = self.last_update;
             NSDictionary *update = [result objectForKey:@"update"];
@@ -214,27 +216,33 @@ typedef struct JsonHttpResponse {
 
     dispatch_async(self.serialQueue, ^{
         self.callbackId = command.callbackId;
-
-
         self.ignore_deploy = false;
 
-        NSArray *paths = NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, YES);
-        NSString *libraryDirectory = [paths objectAtIndex:0];
+        NSString *upstream_uuid = [[NSUserDefaults standardUserDefaults] objectForKey:@"upstream_uuid"];
 
-        NSString *uuid = [[NSUserDefaults standardUserDefaults] objectForKey:@"uuid"];
+        if(upstream_uuid != nil && [self hasVersion:upstream_uuid]) {
+            [self updateVersionLabel:NOTHING_TO_IGNORE];
+            [self.commandDelegate sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"done"] callbackId:self.callbackId];
+        } else {
+            NSArray *paths = NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, YES);
+            NSString *libraryDirectory = [paths objectAtIndex:0];
 
-        NSString *filePath = [NSString stringWithFormat:@"%@/%@", libraryDirectory, @"www.zip"];
-        NSString *extractPath = [NSString stringWithFormat:@"%@/%@/", libraryDirectory, uuid];
+            NSString *uuid = [[NSUserDefaults standardUserDefaults] objectForKey:@"uuid"];
 
-        NSLog(@"Path for zip file: %@", filePath);
+            NSString *filePath = [NSString stringWithFormat:@"%@/%@", libraryDirectory, @"www.zip"];
+            NSString *extractPath = [NSString stringWithFormat:@"%@/%@/", libraryDirectory, uuid];
 
-        NSLog(@"Unzipping...");
+            NSLog(@"Path for zip file: %@", filePath);
 
-        [SSZipArchive unzipFileAtPath:filePath toDestination:extractPath delegate:self];
-        [self updateVersionLabel:NOTHING_TO_IGNORE];
-        BOOL success = [[NSFileManager defaultManager] removeItemAtPath:filePath error:nil];
-        NSLog(@"Unzipped...");
-        NSLog(@"Removing www.zip %d", success);
+            NSLog(@"Unzipping...");
+
+            [SSZipArchive unzipFileAtPath:filePath toDestination:extractPath delegate:self];
+            [self saveVersion:upstream_uuid];
+            [self excludeVersionFromBackup:uuid];
+            BOOL success = [[NSFileManager defaultManager] removeItemAtPath:filePath error:nil];
+            NSLog(@"Unzipped...");
+            NSLog(@"Removing www.zip %d", success);
+        }
     });
 }
 
@@ -257,6 +265,49 @@ typedef struct JsonHttpResponse {
     [json setObject:uuid forKey:@"deploy_uuid"];
     [json setObject:[[self deconstructVersionLabel:self.version_label] firstObject] forKey:@"binary_version"];
     [self.commandDelegate sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:json] callbackId:command.callbackId];
+}
+
+- (void) getVersions:(CDVInvokedUrlCommand *)command {
+    [self.commandDelegate sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsArray:[self getDeployVersions]] callbackId:command.callbackId];
+}
+
+- (void) getMetadata:(CDVInvokedUrlCommand *)command {
+    self.appId = [command.arguments objectAtIndex:0];
+    CDVPluginResult *pluginResult = nil;
+    NSString *uuid = [command.arguments objectAtIndex:1];
+    
+    if (uuid == nil || uuid == [NSNull null] || [uuid isEqualToString:@""] || [uuid isEqualToString:@"null"]) {
+        uuid = [[NSUserDefaults standardUserDefaults] objectForKey:@"upstream_uuid"];
+    }
+
+    if (uuid == nil || uuid == [NSNull null] || [uuid isEqualToString:@""] || [uuid isEqualToString:@"null"]) {
+        pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"NO_DEPLOY_UUID_AVAILABLE"];
+    } else {
+        NSString *baseUrl = self.deploy_server;
+        NSString *endpoint = [NSString stringWithFormat:@"/api/v1/apps/%@/updates/%@/", self.appId, uuid];
+        NSString *url = [NSString stringWithFormat:@"%@%@", baseUrl, endpoint];
+        NSDictionary* headers = @{@"Content-Type": @"application/json", @"accept": @"application/json"};
+
+        NSError *httpError = nil;
+
+        UNIHTTPJsonResponse *result = [[UNIRest get:^(UNISimpleRequest *request) {
+            [request setUrl:url];
+            [request setHeaders:headers];
+        }] asJson:&httpError];
+
+        @try {
+            pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:[result.body JSONObject]];
+        }
+        @catch (NSException *exception) {
+            pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"DEPLOY_HTTP_ERROR"];
+        }
+
+        if (httpError || result.code != 200) {
+            pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"DEPLOY_HTTP_ERROR"];
+        }
+    }
+
+    [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
 }
 
 
@@ -297,7 +348,7 @@ typedef struct JsonHttpResponse {
 }
 
 - (struct JsonHttpResponse) postDeviceDetails {
-    NSString *baseUrl = @"https://apps.ionic.io";
+    NSString *baseUrl = self.deploy_server;
     NSString *endpoint = [NSString stringWithFormat:@"/api/v1/apps/%@/updates/check/", self.appId];
     NSString *url = [NSString stringWithFormat:@"%@%@", baseUrl, endpoint];
     NSDictionary* headers = @{@"Content-Type": @"application/json", @"accept": @"application/json"};
@@ -314,7 +365,6 @@ typedef struct JsonHttpResponse {
         @"device_platform": @"ios",
         @"channel_tag": self.channel_tag
     };
-
 
     UNIHTTPJsonResponse *result = [[UNIRest postEntity:^(UNIBodyRequest *request) {
       [request setUrl:url];
@@ -363,6 +413,37 @@ typedef struct JsonHttpResponse {
     return versions;
 }
 
+- (NSMutableArray *) getDeployVersions {
+    NSArray *versions = [self getMyVersions];
+    NSMutableArray *deployVersions = [[NSMutableArray alloc] initWithCapacity:5];
+    
+    for (id version in versions) {
+        NSArray *version_parts = [version componentsSeparatedByString:@"|"];
+        NSString *version_uuid = version_parts[1];
+        [deployVersions addObject:version_uuid];
+    }
+
+    return deployVersions;
+}
+
+- (void) removeVersionFromPreferences:(NSString *) uuid {
+    NSUserDefaults *prefs = [NSUserDefaults standardUserDefaults];
+    NSArray *versions = [self getMyVersions];
+    NSMutableArray *newVersions = [[NSMutableArray alloc] initWithCapacity:5];
+    
+    for (id version in versions) {
+        NSArray *version_parts = [version componentsSeparatedByString:@"|"];
+        NSString *version_uuid = version_parts[1];
+        if (![version_uuid isEqualToString:uuid]) {
+            [newVersions addObject:version_uuid];
+        }
+    }
+
+    [prefs setObject:newVersions forKey:@"my_versions"];
+    [prefs synchronize];
+}
+
+
 - (bool) hasVersion:(NSString *) uuid {
     NSArray *versions = [self getMyVersions];
 
@@ -379,6 +460,19 @@ typedef struct JsonHttpResponse {
     }
 
     return false;
+}
+
+- (void) deleteVersion:(CDVInvokedUrlCommand *)command {
+    NSString *uuid = [command.arguments objectAtIndex:1];
+    BOOL success = [self removeVersion:uuid];
+    CDVPluginResult *pluginResult = nil;
+
+    if (success) {
+        pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
+    } else {
+        pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"Unable to delete the deploy version"];
+    }
+    [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
 }
 
 - (void) saveVersion:(NSString *) uuid {
@@ -432,15 +526,44 @@ typedef struct JsonHttpResponse {
     }
 }
 
-- (void) removeVersion:(NSString *) uuid {
+- (BOOL) excludeVersionFromBackup:(NSString *) uuid {
+    NSArray *paths = NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, YES);
+    NSString *libraryDirectory = [paths objectAtIndex:0];
+
+    NSString *pathToFolder = [NSString stringWithFormat:@"%@/%@", libraryDirectory, uuid];
+    NSURL *URL= [NSURL fileURLWithPath:pathToFolder];
+
+    NSError *error = nil;
+    BOOL success = [URL setResourceValue:[NSNumber numberWithBool: YES] forKey: NSURLIsExcludedFromBackupKey error: &error];
+    if(!success){
+        NSLog(@"Error excluding %@ from backup %@", [URL lastPathComponent], error);
+    } else {
+        NSLog(@"Excluding %@ from backup", pathToFolder);
+    }
+    return success;
+}
+
+- (BOOL) removeVersion:(NSString *) uuid {
+    NSUserDefaults *prefs = [NSUserDefaults standardUserDefaults];
+    NSString *currentUUID = [self getUUID];
     NSArray *paths = NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, YES);
     NSString *libraryDirectory = [paths objectAtIndex:0];
 
     NSString *pathToFolder = [NSString stringWithFormat:@"%@/%@/", libraryDirectory, uuid];
 
+    if ([uuid isEqualToString: currentUUID]) {
+        [prefs setObject: @"" forKey: @"uuid"];
+        [prefs synchronize];
+    }
+
     BOOL success = [[NSFileManager defaultManager] removeItemAtPath:pathToFolder error:nil];
 
+    if(success) {
+        [self removeVersionFromPreferences:uuid];
+    }
+
     NSLog(@"Removed Version %@ success? %d", uuid, success);
+    return success;
 }
 
 /* Delegate Methods for the DownloadManager */
@@ -464,6 +587,14 @@ typedef struct JsonHttpResponse {
     [self.commandDelegate sendPluginResult:pluginResult callbackId:self.callbackId];
 }
 
+- (void)didErrorLoadingAllForManager:(DownloadManager *)downloadManager{
+    NSLog(@"Download Error");
+    CDVPluginResult* pluginResult = nil;
+    pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"download error"];
+    
+    [self.commandDelegate sendPluginResult:pluginResult callbackId:self.callbackId];
+}
+
 - (void)didFinishLoadingAllForManager:(DownloadManager *)downloadManager
 {
     // Save the upstream_uuid (what we just downloaded) to the uuid preference
@@ -475,9 +606,6 @@ typedef struct JsonHttpResponse {
     [prefs synchronize];
 
     NSLog(@"UUID is: %@ and upstream_uuid is: %@", uuid, upstream_uuid);
-
-    [self saveVersion:upstream_uuid];
-
     NSLog(@"Download Finished...");
     CDVPluginResult* pluginResult = nil;
     pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"true"];
