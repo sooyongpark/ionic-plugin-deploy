@@ -585,9 +585,6 @@ public class IonicDeploy extends CordovaPlugin {
 
     logMessage("UNZIP", upstream_uuid);
 
-    this.ignore_deploy = false;
-    this.updateVersionLabel(IonicDeploy.NOTHING_TO_IGNORE);
-
     if (upstream_uuid != "" && this.hasVersion(upstream_uuid)) {
       callbackContext.success("done"); // we have already extracted this version
       return;
@@ -645,6 +642,23 @@ public class IonicDeploy extends CordovaPlugin {
     } catch(Exception e) {
       //TODO Handle problems..
       logMessage("UNZIP_STEP", "Exception: " + e.getMessage());
+
+      // clean up any zip files dowloaded as they may be corrupted, we can download again if we start over
+      String wwwFile = this.myContext.getFileStreamPath(zip).getAbsolutePath().toString();
+      if (this.myContext.getFileStreamPath(zip).exists()) {
+        String deleteCmd = "rm -r " + wwwFile;
+        Runtime runtime = Runtime.getRuntime();
+        try {
+          runtime.exec(deleteCmd);
+          logMessage("REMOVE", "Removed www.zip");
+        } catch (IOException ioe) {
+          logMessage("REMOVE", "Failed to remove " + wwwFile + ". Error: " + e.getMessage());
+        }
+      }
+
+      // make sure to send an error
+      callbackContext.error(e.getMessage());
+      return;
     }
 
     // Save the version we just downloaded as a version on hand
@@ -661,6 +675,10 @@ public class IonicDeploy extends CordovaPlugin {
         logMessage("REMOVE", "Failed to remove " + wwwFile + ". Error: " + e.getMessage());
       }
     }
+
+    // if we get here we know unzip worked
+    this.ignore_deploy = false;
+    this.updateVersionLabel(IonicDeploy.NOTHING_TO_IGNORE);
 
     callbackContext.success("done");
   }
