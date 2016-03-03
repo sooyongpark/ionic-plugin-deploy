@@ -342,7 +342,7 @@ typedef struct JsonHttpResponse {
             self.currentUUID = uuid;
 
             NSLog(@"Redirecting to: %@", components.URL.absoluteString);
-            [self.webView loadRequest: [NSURLRequest requestWithURL:components.URL] ];
+             [((UIWebView*)self.webView) loadRequest: [NSURLRequest requestWithURL:components.URL] ];
         }
         });
     }
