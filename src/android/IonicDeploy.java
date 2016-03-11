@@ -1,4 +1,4 @@
-package com.ionic.deploy;
+package io.ionic.deploy;
 
 import android.content.Context;
 import android.content.pm.PackageInfo;
