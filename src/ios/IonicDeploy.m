@@ -141,9 +141,7 @@ typedef struct JsonHttpResponse {
             if (compatible != [NSNumber numberWithBool:YES]) {
                 NSLog(@"Refusing update due to incompatible binary version");
             } else if(update_available == [NSNumber numberWithBool: YES]) {
-                NSDictionary *update = [resp objectForKey:@"metadata"];
                 NSString *update_uuid = [resp objectForKey:@"snapshot"];
-
                 NSLog(@"update uuid: %@", update_uuid);
 
                 if(![update_uuid isEqual:ignore_version] && ![update_uuid isEqual:our_version]) {
@@ -294,19 +292,19 @@ typedef struct JsonHttpResponse {
 
         NSMutableDictionary *deviceDict = [NSMutableDictionary
                                            dictionaryWithDictionary:@{
-                                                                      @"platform" : @"ios",
-                                                                      @"binary_version" : app_version,
-                                                                      }];
+            @"platform" : @"ios",
+            @"binary_version" : app_version
+        }];
 
         if (uuid != nil && ![uuid  isEqual: @""]) {
             deviceDict[@"snapshot"] = uuid;
         }
 
         NSDictionary *parameters = @{
-                                     @"device": deviceDict,
-                                     @"app_id": self.appId,
-                                     @"channel_tag": self.channel_tag
-                                     };
+            @"device": deviceDict,
+            @"app_id": self.appId,
+            @"channel_tag": self.channel_tag
+        };
 
         UNIHTTPJsonResponse *result = [[UNIRest postEntity:^(UNIBodyRequest *request) {
             [request setUrl:url];
