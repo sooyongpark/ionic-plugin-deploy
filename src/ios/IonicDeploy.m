@@ -282,7 +282,6 @@ typedef struct JsonHttpResponse {
     if (uuid == nil || uuid == [NSNull null] || [uuid isEqualToString:@""] || [uuid isEqualToString:@"null"]) {
         pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"NO_DEPLOY_UUID_AVAILABLE"];
     } else {
-        NSLog(@"UUID: %@", uuid);
         NSString *strippedUUID = [uuid stringByReplacingOccurrencesOfString:@"-" withString:@""];
         NSMutableString *formattedUUID = [NSMutableString stringWithString: strippedUUID];
         [formattedUUID insertString: @"-" atIndex: 8];
@@ -293,7 +292,6 @@ typedef struct JsonHttpResponse {
         NSString *endpoint = [NSString stringWithFormat:@"/deploy/snapshots/%@?app_id=%@", formattedUUID.lowercaseString, self.appId];
         NSString *url = [NSString stringWithFormat:@"%@%@", baseUrl, endpoint];
         NSDictionary* headers = @{@"Content-Type": @"application/json", @"accept": @"application/json"};
-        NSLog(@"Foramtted URL: %@", url);
 
         NSError *httpError = nil;
 
@@ -305,7 +303,6 @@ typedef struct JsonHttpResponse {
         @try {
             JsonHttpResponse response;
             response.json = [result.body JSONObject];
-            NSLog(@"JSON: %@", response.json);
             NSDictionary *resp = [response.json objectForKey: @"data"];
             NSDictionary *metadata = [resp objectForKey:@"user_metadata"];
             NSDictionary *res = @{
@@ -392,7 +389,6 @@ typedef struct JsonHttpResponse {
       [request setBody:[NSJSONSerialization dataWithJSONObject:parameters options:0 error:nil]];
     }] asJson];
 
-    NSLog(@"url is: %@", url);
     NSLog(@"version is: %@", app_version);
     NSLog(@"uuid is: %@", uuid);
     NSLog(@"channel is: %@", self.channel_tag);
