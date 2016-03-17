@@ -282,44 +282,36 @@ typedef struct JsonHttpResponse {
     if (uuid == nil || uuid == [NSNull null] || [uuid isEqualToString:@""] || [uuid isEqualToString:@"null"]) {
         pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"NO_DEPLOY_UUID_AVAILABLE"];
     } else {
+        NSLog(@"UUID: %@", uuid);
+        NSString *strippedUUID = [uuid stringByReplacingOccurrencesOfString:@"-" withString:@""];
+        NSMutableString *formattedUUID = [NSMutableString stringWithString: strippedUUID];
+        [formattedUUID insertString: @"-" atIndex: 8];
+        [formattedUUID insertString: @"-" atIndex: 13];
+        [formattedUUID insertString: @"-" atIndex: 18];
+        [formattedUUID insertString: @"-" atIndex: 23];
         NSString *baseUrl = self.deploy_server;
-        NSString *endpoint = [NSString stringWithFormat:@"/deploy/channels/%@/check-device/", self.channel_tag];
+        NSString *endpoint = [NSString stringWithFormat:@"/deploy/snapshots/%@?app_id=%@", formattedUUID.lowercaseString, self.appId];
         NSString *url = [NSString stringWithFormat:@"%@%@", baseUrl, endpoint];
         NSDictionary* headers = @{@"Content-Type": @"application/json", @"accept": @"application/json"};
-
-        NSString *uuid = [[NSUserDefaults standardUserDefaults] objectForKey:@"uuid"];
-        NSString *app_version = [[self deconstructVersionLabel:self.version_label] firstObject];
-
-        NSMutableDictionary *deviceDict = [NSMutableDictionary
-                                           dictionaryWithDictionary:@{
-            @"platform" : @"ios",
-            @"binary_version" : app_version
-        }];
-
-        if (uuid != nil && ![uuid  isEqual: @""]) {
-            deviceDict[@"snapshot"] = uuid;
-        }
-
-        NSDictionary *parameters = @{
-            @"device": deviceDict,
-            @"app_id": self.appId,
-            @"channel_tag": self.channel_tag
-        };
-
-        UNIHTTPJsonResponse *result = [[UNIRest postEntity:^(UNIBodyRequest *request) {
-            [request setUrl:url];
-            [request setHeaders:headers];
-            [request setBody:[NSJSONSerialization dataWithJSONObject:parameters options:0 error:nil]];
-        }] asJson];
+        NSLog(@"Foramtted URL: %@", url);
 
         NSError *httpError = nil;
+
+        UNIHTTPJsonResponse *result = [[UNIRest get:^(UNISimpleRequest *request) {
+            [request setUrl:url];
+            [request setHeaders:headers];
+        }] asJson:&httpError];
 
         @try {
             JsonHttpResponse response;
             response.json = [result.body JSONObject];
+            NSLog(@"JSON: %@", response.json);
             NSDictionary *resp = [response.json objectForKey: @"data"];
-            NSDictionary *metadata = [resp objectForKey:@"metadata"];
-            pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:metadata];
+            NSDictionary *metadata = [resp objectForKey:@"user_metadata"];
+            NSDictionary *res = @{
+                @"metadata": metadata
+            };
+            pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:res];
         }
         @catch (NSException *exception) {
             pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"DEPLOY_HTTP_ERROR"];
