@@ -153,7 +153,7 @@ typedef struct JsonHttpResponse {
                 }
             }
 
-            if (update_available == [NSNumber numberWithBool:YES]) {
+            if (update_available == [NSNumber numberWithBool:YES] && compatible == [NSNumber numberWithBool:YES]) {
                 NSLog(@"update is true");
                 pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"true"];
             } else {
