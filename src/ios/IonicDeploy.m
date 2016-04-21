@@ -99,6 +99,11 @@ typedef struct JsonHttpResponse {
     }
 }
 
+- (BOOL)shouldOverrideLoadWithRequest:(NSURLRequest*)request navigationType:(UIWebViewNavigationType)navigationType {
+    [self doRedirect];
+    return NO;
+}
+
 - (void) onReset {
     // redirect to latest deploy
     [self doRedirect];
