@@ -1,6 +1,10 @@
 Changelog
 =========
 
+## 0.5.2
+
+* Added a README.
+
 ## 0.5.1
 
 * Added `shouldOverrideLoadWithRequest` function to address deploy persistence on `cordova-ios` versions `4.x`.  
