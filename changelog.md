@@ -1,6 +1,10 @@
 Changelog
 =========
 
+## 0.5.3
+
+* Update `plugin.xml`.  Whoops...
+
 ## 0.5.2
 
 * Added a README.
