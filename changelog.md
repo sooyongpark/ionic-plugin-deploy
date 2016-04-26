@@ -1,6 +1,10 @@
 Changelog
 =========
 
+## 0.5.4
+
+* Fix `shouldOverrideLoadWithRequest` on iOS.
+
 ## 0.5.3
 
 * Update `plugin.xml`.  Whoops...
