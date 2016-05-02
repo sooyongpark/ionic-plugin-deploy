@@ -3,6 +3,7 @@
 #import "UNIRest.h"
 #import "SSZipArchive.h"
 #import "IonicConstant.h"
+#import <objc/message.h>
 
 @interface IonicDeploy()
 
@@ -358,7 +359,16 @@ typedef struct JsonHttpResponse {
             self.currentUUID = uuid;
 
             NSLog(@"Redirecting to: %@", components.URL.absoluteString);
-             [((UIWebView*)self.webView) loadRequest: [NSURLRequest requestWithURL:components.URL] ];
+            
+            SEL wkWebViewSelector = NSSelectorFromString(@"loadFileURL:allowingReadAccessToURL:");
+            
+            if ([self.webView respondsToSelector:wkWebViewSelector]) {
+                NSURL *readAccessUrl = [components.URL URLByDeletingLastPathComponent];
+                ((id (*)(id, SEL, id, id))objc_msgSend)(self.webView, wkWebViewSelector, components.URL, readAccessUrl);
+            }
+            else {
+                [((UIWebView*)self.webView) loadRequest: [NSURLRequest requestWithURL:components.URL] ];
+            }
         }
         });
     }
