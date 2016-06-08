@@ -1,6 +1,14 @@
 Changelog
 =========
 
+## 0.5.6
+
+* Update `plugin.xml` version, `package.json` version, and changelog.
+
+## 0.5.5
+
+* Update `removeVersionFromPreferences`. Fixes #73
+
 ## 0.5.4
 
 * Fix `shouldOverrideLoadWithRequest` on iOS.
