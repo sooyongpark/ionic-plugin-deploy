@@ -30,8 +30,7 @@ Changelog
 
 ## 0.5.0
 
-* **(breaking)** The plugin is incompatible with `ionic-platform-web-client`
-  version 0.6.0 and lower.
+* **(breaking)** The plugin is incompatible with `ionic-platform-web-client` version 0.6.0 and lower.
 * (fix) Android package is now correctly set as io.ionic
 * (fix) Plugin now builds correctly cordova-ios 4.x - PR #50
 * (fix) Errors propagate correctly when unzip fails - PR #44
@@ -44,10 +43,8 @@ Changelog
 ## 0.4.0
 
 * Added `getMetadata` method to fetch deploy metadata
-* Added `getVersions` and `removeVersion` methods. They will allow you to manage the deploys
-  currently on the device.
-* (fix) iOS deploys will now give a download error if the app goes into the background while
-  downloading a deploy.
+* Added `getVersions` and `removeVersion` methods. They will allow you to manage the deploys currently on the device.
+* (fix) iOS deploys will now give a download error if the app goes into the background while downloading a deploy.
 * (fix) Excluding deploys from iOS cloud backups
 * (fix) iOS rollbacks now behave the same as android
 
