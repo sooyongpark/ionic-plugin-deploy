@@ -8,6 +8,7 @@ Changelog
 ## 0.5.5
 
 * Update `removeVersionFromPreferences`. Fixes #73
+* Add support for `cordova-plugin-wkwebview-engine` - PR #66
 
 ## 0.5.4
 
