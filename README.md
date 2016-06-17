@@ -2,7 +2,7 @@
 
 The Cordova plugin for Ionic Deploy.
 
-Check out our [docs](http://docs.ionic.io/docs/io-introduction) for more detailed information.
+Check out our [docs](http://docs.ionic.io/docs/deploy-overview) for more detailed information.
 
 ## Installation
 
