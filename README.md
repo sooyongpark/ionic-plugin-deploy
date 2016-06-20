@@ -52,7 +52,7 @@ IonicDeploy.init('org.cordova.helloworld', 'https://helloworld.org/deploy')
 - onSuccess: `CheckHandler`
 - onError: `ErrorHandler`
 
-Contact the remote IonicDeploy service (as configured during `IonicDeploy.init(...)`) and determine whether an update is available. Store metadata from available updates for future calls to `IonicDeploy.download(...)`.
+Contact the remote IonicDeploy service (as configured during `IonicDeploy.init(...)`) and passes the result along to `IonicDeploy.init(...)`.
 
 
 ##### `CheckHandler (result)`
@@ -65,13 +65,39 @@ Contact the remote IonicDeploy service (as configured during `IonicDeploy.init(.
 ##### `ErrorHandler (error)`
 
 
+#### `parseUpdate (appId, response, onSuccess, onError)`
+
+- appId: `String`
+- response: `UpdateResponse`
+- onSuccess: `CheckHandler`
+- onError: `ErrorHandler`
+
+Determine whether an update is available, by checking the provided response data. Store metadata from available updates for future calls to `IonicDeploy.download(...)`.
+
+This function is useful for testing, and also for using a custom remote update service. For all other use cases, you should just use `IonicDeploy.check(...)`.
+
+
+##### `UpdateResponse`
+
+```
+interface UpdateResponse {
+  data: {
+    available: Boolean,
+    compatible: Boolean,
+    snapshot: String, // (unique per update, e.g. UUID)
+    url: String // (URL to download)
+  }
+}
+```
+
+
 #### `download (appId, onSuccess, onError)`
 
 - appId: `String`
 - onSuccess: `DownloadHandler`
 - onError: `ErrorHandler`
 
-Using the metadata from a recent `IonicDeploy.check(...)`, download and store an available update ZIP file.  
+Using the metadata from a recent `IonicDeploy.check(...)` (or `IonicDeploy.parseUpdate(...)`), download and store an available update ZIP file.
 
 
 ##### `DownloadHandler (result)`
@@ -87,7 +113,7 @@ If `result` is a numeric value, it communicates progress. If `result` is the str
 - onSuccess: `ExtractHandler`
 - onError: `ErrorHandler`
 
-Unpack and apply the update ZIP file from a recent `IonicDeploy.download(...)`. After the app is [terminated](https://developer.apple.com/library/ios/documentation/iPhone/Conceptual/iPhoneOSProgrammingGuide/TheAppLifeCycle/TheAppLifeCycle.html#//apple_ref/doc/uid/TP40007072-CH2-SW7) / [destroyed](https://developer.android.com/reference/android/app/Activity.html#onDestroy()) by the operating system, the update will take effect.  
+Unpack and apply the update ZIP file from a recent `IonicDeploy.download(...)`. After the app is [terminated](https://developer.apple.com/library/ios/documentation/iPhone/Conceptual/iPhoneOSProgrammingGuide/TheAppLifeCycle/TheAppLifeCycle.html#//apple_ref/doc/uid/TP40007072-CH2-SW7) / [destroyed](https://developer.android.com/reference/android/app/Activity.html#onDestroy()) by the operating system, the update will take effect.
 
 The contents of the ZIP file should be the contents of the platform-specific "www" directory from a Cordova project. This directory is regenerated during `cordova build`.
 
