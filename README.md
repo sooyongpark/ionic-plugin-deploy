@@ -68,13 +68,13 @@ Contact the remote IonicDeploy service (as configured during `IonicDeploy.init(.
 #### `download (appId, onSuccess, onError)`
 
 - appId: `String`
-- onSuccess: `ProgressHandler`
+- onSuccess: `DownloadHandler`
 - onError: `ErrorHandler`
 
 Using the metadata from a recent `IonicDeploy.check(...)`, download and store an available update ZIP file.  
 
 
-##### `ProgressHandler (result)`
+##### `DownloadHandler (result)`
 
 - result: `String` or `Number`
 
@@ -84,12 +84,19 @@ If `result` is a numeric value, it communicates progress. If `result` is the str
 #### `extract (appId, onSuccess, onError)`
 
 - appId: `String`
-- onSuccess: `ProgressHandler`
+- onSuccess: `ExtractHandler`
 - onError: `ErrorHandler`
 
 Unpack and apply the update ZIP file from a recent `IonicDeploy.download(...)`. After the app is [terminated](https://developer.apple.com/library/ios/documentation/iPhone/Conceptual/iPhoneOSProgrammingGuide/TheAppLifeCycle/TheAppLifeCycle.html#//apple_ref/doc/uid/TP40007072-CH2-SW7) / [destroyed](https://developer.android.com/reference/android/app/Activity.html#onDestroy()) by the operating system, the update will take effect.  
 
 The contents of the ZIP file should be the contents of the platform-specific "www" directory from a Cordova project. This directory is regenerated during `cordova build`.
+
+
+##### `ExtractHandler (result)`
+
+- result: `String` or `Number`
+
+If `result` is a numeric value, it communicates progress. If `result` is the string `"done"`, it communicates completion.
 
 
 #### `redirect (appId)`
