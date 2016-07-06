@@ -156,7 +156,7 @@ public class IonicDeploy extends CordovaPlugin {
     this.prefs = getPreferences();
 
     initApp(args.getString(0));
-    
+
     final SharedPreferences prefs = this.prefs;
 
     if (action.equals("initialize")) {
@@ -230,6 +230,15 @@ public class IonicDeploy extends CordovaPlugin {
         });
       }
       return true;
+    } else if (action.equals("parseUpdate")) {
+      logMessage("PARSEUPDATE", "Checking response for updates");
+      final String response = args.getString(1);
+      cordova.getThreadPool().execute(new Runnable() {
+        public void run() {
+          parseUpdate(callbackContext, response);
+        }
+      });
+      return true;
     } else {
       return false;
     }
@@ -299,11 +308,28 @@ public class IonicDeploy extends CordovaPlugin {
 
   private void checkForUpdates(CallbackContext callbackContext, final String channel_tag) {
 
+    String deployed_version = this.prefs.getString("uuid", "");
+    JsonHttpResponse response = postDeviceDetails(deployed_version, channel_tag);
+
+    this.parseUpdate(callbackContext, response);
+  }
+
+  private void parseUpdate(CallbackContext callbackContext, String response) {
+    try {
+      JsonHttpResponse jsonResponse = new JsonHttpResponse();
+      jsonResponse.json = new JSONObject(response);
+      parseUpdate(callbackContext, jsonResponse);
+    } catch (JSONException e) {
+      logMessage("PARSEUPDATE", e.toString());
+      callbackContext.error("Error parsing check response.");
+    }
+  }
+
+  private void parseUpdate(CallbackContext callbackContext, JsonHttpResponse response) {
+
     this.last_update = null;
     String ignore_version = this.prefs.getString("ionicdeploy_version_ignore", "");
-    String deployed_version = this.prefs.getString("uuid", "");
     String loaded_version = this.prefs.getString("loaded_uuid", "");
-    JsonHttpResponse response = postDeviceDetails(deployed_version, channel_tag);
 
     try {
       if (response.json != null) {
@@ -312,7 +338,7 @@ public class IonicDeploy extends CordovaPlugin {
         Boolean updatesAvailable = Boolean.valueOf(update.getString("available"));
 
         if(!compatible) {
-          logMessage("CHECK", "Refusing update due to incompatible binary version");
+          logMessage("PARSEUPDATE", "Refusing update due to incompatible binary version");
         } else if(updatesAvailable) {
           try {
             String update_uuid = update.getString("snapshot");
@@ -322,7 +348,7 @@ public class IonicDeploy extends CordovaPlugin {
             } else {
               updatesAvailable = new Boolean(false);
             }
-            
+
           } catch (JSONException e) {
             callbackContext.error("Update information is not available");
           }
@@ -334,11 +360,11 @@ public class IonicDeploy extends CordovaPlugin {
           callbackContext.success("false");
         }
       } else {
-        logMessage("CHECK", "Unable to check for updates.");
+        logMessage("PARSEUPDATE", "Unable to check for updates.");
         callbackContext.success("false");
       }
     } catch (JSONException e) {
-      logMessage("CHECK", e.toString());
+      logMessage("PARSEUPDATE", e.toString());
       callbackContext.error("Error checking for updates.");
     }
   }
@@ -520,7 +546,7 @@ public class IonicDeploy extends CordovaPlugin {
 
       URL url = new URL(this.server + endpoint);
       HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-      
+
       conn.setDoOutput(true);
       conn.setRequestMethod("POST");
       conn.setRequestProperty("Content-Type", "application/json");

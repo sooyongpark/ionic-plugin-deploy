@@ -5,6 +5,12 @@
 #import "IonicConstant.h"
 #import <objc/message.h>
 
+typedef struct JsonHttpResponse {
+    __unsafe_unretained NSString *message;
+    __unsafe_unretained NSDictionary *json;
+    Boolean *error;
+} JsonHttpResponse;
+
 @interface IonicDeploy()
 
 @property (nonatomic) NSURLConnection *connectionManager;
@@ -23,15 +29,12 @@
 @property NSString *cordova_js_resource;
 @property NSString *deploy_server;
 
+// private
+- (void) handleCheckResponse:(JsonHttpResponse)result callbackId:(NSString *)callbackId;
+
 @end
 
 static NSOperationQueue *delegateQueue;
-
-typedef struct JsonHttpResponse {
-    __unsafe_unretained NSString *message;
-    __unsafe_unretained NSDictionary *json;
-    Boolean *error;
-} JsonHttpResponse;
 
 @implementation IonicDeploy
 
@@ -124,56 +127,92 @@ typedef struct JsonHttpResponse {
     }
 
     dispatch_async(self.serialQueue, ^{
-        CDVPluginResult* pluginResult = nil;
-
-        NSUserDefaults *prefs = [NSUserDefaults standardUserDefaults];
-
-        NSString *our_version = [[NSUserDefaults standardUserDefaults] objectForKey:@"uuid"];
-
         JsonHttpResponse result = [self postDeviceDetails];
 
         NSLog(@"Response: %@", result.message);
 
-        if(result.json != nil) {
-            NSLog(@"JSON: %@", result.json);
-            NSDictionary *resp = [result.json objectForKey: @"data"];
-            NSNumber *compatible = [resp valueForKey:@"compatible"];
-            NSNumber *update_available = [resp valueForKey:@"available"];
-            NSString *ignore_version = [prefs objectForKey:@"ionicdeploy_version_ignore"];
+        [self handleCheckResponse:result callbackId:command.callbackId];
+    });
+}
 
-            NSLog(@"compatible: %@", (compatible) ? @"True" : @"False");
-            NSLog(@"available: %@", (update_available) ? @"True" : @"False");
+- (void) parseUpdate:(CDVInvokedUrlCommand *)command {
+    self.appId = [command.arguments objectAtIndex:0];
+    NSString *jsonString = [command.arguments objectAtIndex:1];
+    NSData *jsonData = [jsonString dataUsingEncoding:NSUTF8StringEncoding];
 
-            if (compatible != [NSNumber numberWithBool:YES]) {
-                NSLog(@"Refusing update due to incompatible binary version");
-            } else if(update_available == [NSNumber numberWithBool: YES]) {
-                NSString *update_uuid = [resp objectForKey:@"snapshot"];
-                NSLog(@"update uuid: %@", update_uuid);
+    if([self.appId isEqual: @"YOUR_APP_ID"]) {
+        [self.commandDelegate sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"Please set your app id in app.js for YOUR_APP_ID before using $ionicDeploy"] callbackId:command.callbackId];
+        return;
+    }
 
-                if(![update_uuid isEqual:ignore_version] && ![update_uuid isEqual:our_version]) {
-                    [prefs setObject: update_uuid forKey: @"upstream_uuid"];
-                    [prefs synchronize];
-                    self.last_update = resp;
-                } else {
-                  update_available = 0;
-                }
-            }
+    dispatch_async(self.serialQueue, ^{
+        JsonHttpResponse result;
 
-            if (update_available == [NSNumber numberWithBool:YES] && compatible == [NSNumber numberWithBool:YES]) {
-                NSLog(@"update is true");
-                pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"true"];
-            } else {
-                NSLog(@"update is false");
-                pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"false"];
-            }
-        } else {
-            NSLog(@"unable to check for updates");
-            pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"false"];
+        NSError *jsonError = nil;
+
+        result.message = nil;
+        // https://stackoverflow.com/questions/20374986/
+        result.json = [NSJSONSerialization JSONObjectWithData:jsonData options:0 error:&jsonError];
+
+        NSLog(@"JSON Error: %@", jsonError);
+
+        if (jsonError != nil) {
+            result.message = [NSString stringWithFormat:@"%@", [jsonError localizedDescription]];
+            result.json = nil;
         }
 
-        [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+        NSLog(@"Response: %@", result.message);
 
+        [self handleCheckResponse:result callbackId:command.callbackId];
     });
+}
+
+// private
+- (void) handleCheckResponse:(JsonHttpResponse)result callbackId:(NSString *)callbackId {
+    CDVPluginResult* pluginResult = nil;
+
+    NSUserDefaults *prefs = [NSUserDefaults standardUserDefaults];
+
+    NSString *our_version = [[NSUserDefaults standardUserDefaults] objectForKey:@"uuid"];
+
+    if(result.json != nil) {
+        NSLog(@"JSON: %@", result.json);
+        NSDictionary *resp = [result.json objectForKey: @"data"];
+        NSNumber *compatible = [resp valueForKey:@"compatible"];
+        NSNumber *update_available = [resp valueForKey:@"available"];
+        NSString *ignore_version = [prefs objectForKey:@"ionicdeploy_version_ignore"];
+
+        NSLog(@"compatible: %@", (compatible) ? @"True" : @"False");
+        NSLog(@"available: %@", (update_available) ? @"True" : @"False");
+
+        if (compatible != [NSNumber numberWithBool:YES]) {
+            NSLog(@"Refusing update due to incompatible binary version");
+        } else if(update_available == [NSNumber numberWithBool: YES]) {
+            NSString *update_uuid = [resp objectForKey:@"snapshot"];
+            NSLog(@"update uuid: %@", update_uuid);
+
+            if(![update_uuid isEqual:ignore_version] && ![update_uuid isEqual:our_version]) {
+                [prefs setObject: update_uuid forKey: @"upstream_uuid"];
+                [prefs synchronize];
+                self.last_update = resp;
+            } else {
+                update_available = 0;
+            }
+        }
+
+        if (update_available == [NSNumber numberWithBool:YES] && compatible == [NSNumber numberWithBool:YES]) {
+            NSLog(@"update is true");
+            pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"true"];
+        } else {
+            NSLog(@"update is false");
+            pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"false"];
+        }
+    } else {
+        NSLog(@"unable to check for updates");
+        pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"false"];
+    }
+
+    [self.commandDelegate sendPluginResult:pluginResult callbackId:callbackId];
 }
 
 - (void) download:(CDVInvokedUrlCommand *)command {
