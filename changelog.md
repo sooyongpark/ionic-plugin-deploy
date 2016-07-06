@@ -1,6 +1,10 @@
 Changelog
 =========
 
+## 0.5.7
+
+* Expose new `parseUpdate()` method for custom remote support - PR #76
+
 ## 0.5.6
 
 * Update `plugin.xml` version, `package.json` version, and changelog.
