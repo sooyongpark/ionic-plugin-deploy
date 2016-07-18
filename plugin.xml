@@ -44,6 +44,12 @@
         <source-file src="src/ios/DownloadManager.m" />
         <header-file src="src/ios/SSZipArchive.h" />
         <source-file src="src/ios/SSZipArchive.m" />
+        <header-file src="src/ios/hpple/TFHpple.h" />
+        <source-file src="src/ios/hpple/TFHpple.m" />
+        <header-file src="src/ios/hpple/TFHppleElement.h" />
+        <source-file src="src/ios/hpple/TFHppleElement.m" />
+        <header-file src="src/ios/hpple/XPathQuery.h" />
+        <source-file src="src/ios/hpple/XPathQuery.m" />
         <header-file src="src/ios/ARCHelper/ARCHelper.h" />
         <header-file src="src/ios/MiniZip/crypt.h" />
         <header-file src="src/ios/MiniZip/ioapi.h" />
