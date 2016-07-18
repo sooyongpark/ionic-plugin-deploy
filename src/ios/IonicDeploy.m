@@ -27,6 +27,7 @@ typedef struct JsonHttpResponse {
 @property NSString *currentUUID;
 @property dispatch_queue_t serialQueue;
 @property NSString *cordova_js_resource;
+@property NSString *index_html_resource;
 @property NSString *deploy_server;
 
 // private
@@ -46,6 +47,7 @@ static NSOperationQueue *delegateQueue;
     if(self.version_label == nil) {
         self.version_label = NO_DEPLOY_LABEL;
     }
+
     [self initVersionChecks];
 }
 
@@ -66,7 +68,7 @@ static NSOperationQueue *delegateQueue;
     NSString *version = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleShortVersionString"];
     NSFileManager* fm = [NSFileManager defaultManager];
     NSDictionary* attrs = [fm attributesOfItemAtPath:self.cordova_js_resource error:nil];
-
+    
     if (attrs != nil) {
         NSDate *date = (NSDate*)[attrs objectForKey: NSFileCreationDate];
         int int_timestamp = [date timeIntervalSince1970];
@@ -90,9 +92,9 @@ static NSOperationQueue *delegateQueue;
     NSUserDefaults *prefs = [NSUserDefaults standardUserDefaults];
     NSString *uuid = [self getUUID];
     NSString *ionicdeploy_version_label = [self constructVersionLabel:uuid];
-
+    
     NSLog(@"VERSION LABEL: %@", ionicdeploy_version_label);
-
+    
     if(![ionicdeploy_version_label isEqualToString: NO_DEPLOY_LABEL]) {
         if(![self.version_label isEqualToString: ionicdeploy_version_label]) {
             self.ignore_deploy = true;
@@ -120,17 +122,17 @@ static NSOperationQueue *delegateQueue;
 - (void) check:(CDVInvokedUrlCommand *)command {
     self.appId = [command.arguments objectAtIndex:0];
     self.channel_tag = [command.arguments objectAtIndex:1];
-
+    
     if([self.appId isEqual: @"YOUR_APP_ID"]) {
         [self.commandDelegate sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"Please set your app id in app.js for YOUR_APP_ID before using $ionicDeploy"] callbackId:command.callbackId];
         return;
     }
-
+    
     dispatch_async(self.serialQueue, ^{
         JsonHttpResponse result = [self postDeviceDetails];
-
+        
         NSLog(@"Response: %@", result.message);
-
+        
         [self handleCheckResponse:result callbackId:command.callbackId];
     });
 }
@@ -139,30 +141,30 @@ static NSOperationQueue *delegateQueue;
     self.appId = [command.arguments objectAtIndex:0];
     NSString *jsonString = [command.arguments objectAtIndex:1];
     NSData *jsonData = [jsonString dataUsingEncoding:NSUTF8StringEncoding];
-
+    
     if([self.appId isEqual: @"YOUR_APP_ID"]) {
         [self.commandDelegate sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"Please set your app id in app.js for YOUR_APP_ID before using $ionicDeploy"] callbackId:command.callbackId];
         return;
     }
-
+    
     dispatch_async(self.serialQueue, ^{
         JsonHttpResponse result;
-
+        
         NSError *jsonError = nil;
-
+        
         result.message = nil;
         // https://stackoverflow.com/questions/20374986/
         result.json = [NSJSONSerialization JSONObjectWithData:jsonData options:0 error:&jsonError];
-
+        
         NSLog(@"JSON Error: %@", jsonError);
-
+        
         if (jsonError != nil) {
             result.message = [NSString stringWithFormat:@"%@", [jsonError localizedDescription]];
             result.json = nil;
         }
-
+        
         NSLog(@"Response: %@", result.message);
-
+        
         [self handleCheckResponse:result callbackId:command.callbackId];
     });
 }
@@ -170,27 +172,27 @@ static NSOperationQueue *delegateQueue;
 // private
 - (void) handleCheckResponse:(JsonHttpResponse)result callbackId:(NSString *)callbackId {
     CDVPluginResult* pluginResult = nil;
-
+    
     NSUserDefaults *prefs = [NSUserDefaults standardUserDefaults];
-
+    
     NSString *our_version = [[NSUserDefaults standardUserDefaults] objectForKey:@"uuid"];
-
+    
     if(result.json != nil) {
         NSLog(@"JSON: %@", result.json);
         NSDictionary *resp = [result.json objectForKey: @"data"];
         NSNumber *compatible = [resp valueForKey:@"compatible"];
         NSNumber *update_available = [resp valueForKey:@"available"];
         NSString *ignore_version = [prefs objectForKey:@"ionicdeploy_version_ignore"];
-
+        
         NSLog(@"compatible: %@", (compatible) ? @"True" : @"False");
         NSLog(@"available: %@", (update_available) ? @"True" : @"False");
-
+        
         if (compatible != [NSNumber numberWithBool:YES]) {
             NSLog(@"Refusing update due to incompatible binary version");
         } else if(update_available == [NSNumber numberWithBool: YES]) {
             NSString *update_uuid = [resp objectForKey:@"snapshot"];
             NSLog(@"update uuid: %@", update_uuid);
-
+            
             if(![update_uuid isEqual:ignore_version] && ![update_uuid isEqual:our_version]) {
                 [prefs setObject: update_uuid forKey: @"upstream_uuid"];
                 [prefs synchronize];
@@ -199,7 +201,7 @@ static NSOperationQueue *delegateQueue;
                 update_available = 0;
             }
         }
-
+        
         if (update_available == [NSNumber numberWithBool:YES] && compatible == [NSNumber numberWithBool:YES]) {
             NSLog(@"update is true");
             pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"true"];
@@ -211,24 +213,24 @@ static NSOperationQueue *delegateQueue;
         NSLog(@"unable to check for updates");
         pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"false"];
     }
-
+    
     [self.commandDelegate sendPluginResult:pluginResult callbackId:callbackId];
 }
 
 - (void) download:(CDVInvokedUrlCommand *)command {
     self.appId = [command.arguments objectAtIndex:0];
-
+    
     dispatch_async(self.serialQueue, ^{
         // Save this to a property so we can have the download progress delegate thing send
         // progress update callbacks
         self.callbackId = command.callbackId;
-
+        
         NSUserDefaults *prefs = [NSUserDefaults standardUserDefaults];
-
+        
         NSString *upstream_uuid = [[NSUserDefaults standardUserDefaults] objectForKey:@"upstream_uuid"];
-
+        
         NSLog(@"Upstream UUID: %@", upstream_uuid);
-
+        
         if (upstream_uuid != nil && [self hasVersion:upstream_uuid]) {
             // Set the current version to the upstream version (we already have this version)
             [prefs setObject:upstream_uuid forKey:@"uuid"];
@@ -237,17 +239,17 @@ static NSOperationQueue *delegateQueue;
         } else {
             NSDictionary *result = self.last_update;
             NSString *download_url = [result objectForKey:@"url"];
-
+            
             NSLog(@"download url is: %@", download_url);
-
+            
             self.downloadManager = [[DownloadManager alloc] initWithDelegate:self];
-
+            
             NSURL *url = [NSURL URLWithString:download_url];
-
+            
             NSArray *paths = NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, YES);
             NSString *libraryDirectory = [paths objectAtIndex:0];
             NSString *filePath = [NSString stringWithFormat:@"%@/%@", libraryDirectory,@"www.zip"];
-
+            
             NSLog(@"Queueing Download...");
             [self.downloadManager addDownloadWithFilename:filePath URL:url];
         }
@@ -256,29 +258,29 @@ static NSOperationQueue *delegateQueue;
 
 - (void) extract:(CDVInvokedUrlCommand *)command {
     self.appId = [command.arguments objectAtIndex:0];
-
+    
     dispatch_async(self.serialQueue, ^{
         self.callbackId = command.callbackId;
         self.ignore_deploy = false;
-
+        
         NSString *upstream_uuid = [[NSUserDefaults standardUserDefaults] objectForKey:@"upstream_uuid"];
-
+        
         if(upstream_uuid != nil && [self hasVersion:upstream_uuid]) {
             [self updateVersionLabel:NOTHING_TO_IGNORE];
             [self.commandDelegate sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"done"] callbackId:self.callbackId];
         } else {
             NSArray *paths = NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, YES);
             NSString *libraryDirectory = [paths objectAtIndex:0];
-
+            
             NSString *uuid = [[NSUserDefaults standardUserDefaults] objectForKey:@"uuid"];
-
+            
             NSString *filePath = [NSString stringWithFormat:@"%@/%@", libraryDirectory, @"www.zip"];
             NSString *extractPath = [NSString stringWithFormat:@"%@/%@/", libraryDirectory, uuid];
-
+            
             NSLog(@"Path for zip file: %@", filePath);
-
+            
             NSLog(@"Unzipping...");
-
+            
             [SSZipArchive unzipFileAtPath:filePath toDestination:extractPath delegate:self];
             [self saveVersion:upstream_uuid];
             [self excludeVersionFromBackup:uuid];
@@ -292,11 +294,11 @@ static NSOperationQueue *delegateQueue;
 
 - (void) redirect:(CDVInvokedUrlCommand *)command {
     self.appId = [command.arguments objectAtIndex:0];
-
+    
     CDVPluginResult* pluginResult = nil;
-
+    
     [self doRedirect];
-
+    
     [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
 }
 
@@ -319,11 +321,11 @@ static NSOperationQueue *delegateQueue;
     self.appId = [command.arguments objectAtIndex:0];
     CDVPluginResult *pluginResult = nil;
     NSString *uuid = [command.arguments objectAtIndex:1];
-
+    
     if (uuid == nil || uuid == [NSNull null] || [uuid isEqualToString:@""] || [uuid isEqualToString:@"null"]) {
         uuid = [[NSUserDefaults standardUserDefaults] objectForKey:@"upstream_uuid"];
     }
-
+    
     if (uuid == nil || uuid == [NSNull null] || [uuid isEqualToString:@""] || [uuid isEqualToString:@"null"]) {
         pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"NO_DEPLOY_UUID_AVAILABLE"];
     } else {
@@ -337,33 +339,33 @@ static NSOperationQueue *delegateQueue;
         NSString *endpoint = [NSString stringWithFormat:@"/deploy/snapshots/%@?app_id=%@", formattedUUID.lowercaseString, self.appId];
         NSString *url = [NSString stringWithFormat:@"%@%@", baseUrl, endpoint];
         NSDictionary* headers = @{@"Content-Type": @"application/json", @"accept": @"application/json"};
-
+        
         NSError *httpError = nil;
-
+        
         UNIHTTPJsonResponse *result = [[UNIRest get:^(UNISimpleRequest *request) {
             [request setUrl:url];
             [request setHeaders:headers];
         }] asJson:&httpError];
-
+        
         @try {
             JsonHttpResponse response;
             response.json = [result.body JSONObject];
             NSDictionary *resp = [response.json objectForKey: @"data"];
             NSDictionary *metadata = [resp objectForKey:@"user_metadata"];
             NSDictionary *res = @{
-                @"metadata": metadata
-            };
+                                  @"metadata": metadata
+                                  };
             pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:res];
         }
         @catch (NSException *exception) {
             pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"DEPLOY_HTTP_ERROR"];
         }
-
+        
         if (httpError || result.code != 200) {
             pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"DEPLOY_HTTP_ERROR"];
         }
     }
-
+    
     [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
 }
 
@@ -375,51 +377,66 @@ static NSOperationQueue *delegateQueue;
     if (ignore == nil) {
         ignore = NOTHING_TO_IGNORE;
     }
+
     NSLog(@"uuid is: %@", uuid);
     if (self.ignore_deploy) {
-       NSLog(@"ignore deploy");
+        NSLog(@"ignore deploy");
     }
+
     NSLog(@"ignore version: %@", ignore);
     if (![uuid isEqualToString:@""] && !self.ignore_deploy && ![uuid isEqualToString:ignore]) {
-
         dispatch_async(self.serialQueue, ^{
-        if ( uuid != nil && ![self.currentUUID isEqualToString: uuid] ) {
-            NSArray *paths = NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, YES);
-            NSString *libraryDirectory = [paths objectAtIndex:0];
+            if ( uuid != nil && ![self.currentUUID isEqualToString: uuid] ) {
+                NSArray *paths = NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, YES);
+                NSString *libraryDirectory = [paths objectAtIndex:0];
+                
+                
+                NSString *query = [NSString stringWithFormat:@"cordova_js_bootstrap_resource=%@", self.cordova_js_resource];
+                
+                NSURLComponents *components = [NSURLComponents new];
+                components.scheme = @"file";
+                components.path = [NSString stringWithFormat:@"%@/%@/index.html", libraryDirectory, uuid];
+                components.query = query;
+                
+                self.currentUUID = uuid;
+                
+                // Load the target index.html
+                NSString *htmlData = [NSString stringWithContentsOfFile:components.path];
+                
+                // Create a regex to find cordova.js
+                NSError *error = nil;
+                NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:@"&[^;]*;" options:NSRegularExpressionCaseInsensitive error:&error];
+                
+                // Modify index.html's cordova.js tag
+                NSString *newHtmlIndex = [regex stringByReplacingMatchesInString:htmlData options:0 range:NSMakeRange(0, [htmlData length]) withTemplate:@""];
+                
+                // Write new index.html
+                [newHtmlIndex writeToFile:components.path atomically:TRUE encoding:NSUTF8StringEncoding error:NULL];
+                
+                // Do redirect
+                NSLog(@"Redirecting to: %@", components.URL.absoluteString);
 
+                SEL wkWebViewSelector = NSSelectorFromString(@"loadFileURL:allowingReadAccessToURL:");
 
-            NSString *query = [NSString stringWithFormat:@"cordova_js_bootstrap_resource=%@", self.cordova_js_resource];
+                if ([self.webView respondsToSelector:wkWebViewSelector]) {
+                    NSURL *readAccessUrl = [components.URL URLByDeletingLastPathComponent];
+                    ((id (*)(id, SEL, id, id))objc_msgSend)(self.webView, wkWebViewSelector, components.URL, readAccessUrl);
 
-            NSURLComponents *components = [NSURLComponents new];
-            components.scheme = @"file";
-            components.path = [NSString stringWithFormat:@"%@/%@/index.html", libraryDirectory, uuid];
-            components.query = query;
+                    dispatch_async(dispatch_get_main_queue(), ^(void){
+                        NSLog(@"Reloading the WKWebView.");
+                        SEL wkWebViewReloadSelector = NSSelectorFromString(@"reload");
+                        ((id (*)(id, SEL))objc_msgSend)(self.webView, wkWebViewReloadSelector);
+                    });
+                }
+                else {
+                    [((UIWebView*)self.webView) loadRequest: [NSURLRequest requestWithURL:components.URL] ];
 
-            self.currentUUID = uuid;
-
-            NSLog(@"Redirecting to: %@", components.URL.absoluteString);
-
-            SEL wkWebViewSelector = NSSelectorFromString(@"loadFileURL:allowingReadAccessToURL:");
-
-            if ([self.webView respondsToSelector:wkWebViewSelector]) {
-                NSURL *readAccessUrl = [components.URL URLByDeletingLastPathComponent];
-                ((id (*)(id, SEL, id, id))objc_msgSend)(self.webView, wkWebViewSelector, components.URL, readAccessUrl);
-
-                dispatch_async(dispatch_get_main_queue(), ^(void){
-                    NSLog(@"Reloading the WKWebView.");
-                    SEL wkWebViewReloadSelector = NSSelectorFromString(@"reload");
-                    ((id (*)(id, SEL))objc_msgSend)(self.webView, wkWebViewReloadSelector);
-                });
+                    dispatch_async(dispatch_get_main_queue(), ^(void){
+                        NSLog(@"Reloading the UIWebView.");
+                        [((UIWebView*)self.webView) reload];
+                    });
+                }
             }
-            else {
-                [((UIWebView*)self.webView) loadRequest: [NSURLRequest requestWithURL:components.URL] ];
-
-                dispatch_async(dispatch_get_main_queue(), ^(void){
-                    NSLog(@"Reloading the UIWebView.");
-                    [((UIWebView*)self.webView) reload];
-                });
-            }
-        }
         });
     }
 }
@@ -431,36 +448,36 @@ static NSOperationQueue *delegateQueue;
     NSDictionary* headers = @{@"Content-Type": @"application/json", @"accept": @"application/json"};
     NSString *uuid = [[NSUserDefaults standardUserDefaults] objectForKey:@"uuid"];
     NSString *app_version = [[self deconstructVersionLabel:self.version_label] firstObject];
-
+    
     NSMutableDictionary *deviceDict = [NSMutableDictionary
-        dictionaryWithDictionary:@{
-        @"platform" : @"ios",
-        @"binary_version" : app_version,
-    }];
-
+                                       dictionaryWithDictionary:@{
+                                                                  @"platform" : @"ios",
+                                                                  @"binary_version" : app_version,
+                                                                  }];
+    
     if (uuid != nil && ![uuid  isEqual: @""]) {
         deviceDict[@"snapshot"] = uuid;
     }
-
+    
     NSDictionary *parameters = @{
-        @"device": deviceDict,
-        @"app_id": self.appId,
-        @"channel_tag": self.channel_tag
-    };
-
+                                 @"device": deviceDict,
+                                 @"app_id": self.appId,
+                                 @"channel_tag": self.channel_tag
+                                 };
+    
     UNIHTTPJsonResponse *result = [[UNIRest postEntity:^(UNIBodyRequest *request) {
-      [request setUrl:url];
-      [request setHeaders:headers];
-      [request setBody:[NSJSONSerialization dataWithJSONObject:parameters options:0 error:nil]];
+        [request setUrl:url];
+        [request setHeaders:headers];
+        [request setBody:[NSJSONSerialization dataWithJSONObject:parameters options:0 error:nil]];
     }] asJson];
-
+    
     NSLog(@"version is: %@", app_version);
     NSLog(@"uuid is: %@", uuid);
     NSLog(@"channel is: %@", self.channel_tag);
-
+    
     JsonHttpResponse response;
     NSError *jsonError = nil;
-
+    
     @try {
         response.message = nil;
         response.json = [result.body JSONObject];
@@ -472,13 +489,13 @@ static NSOperationQueue *delegateQueue;
     }
     @finally {
         NSLog(@"JSON Error: %@", jsonError);
-
+        
         if (jsonError != nil) {
             response.message = [NSString stringWithFormat:@"%@", [jsonError localizedDescription]];
             response.json = nil;
         }
     }
-
+    
     return response;
 }
 
@@ -490,20 +507,20 @@ static NSOperationQueue *delegateQueue;
     } else {
         versions = [[NSMutableArray alloc] initWithCapacity:5];
     }
-
+    
     return versions;
 }
 
 - (NSMutableArray *) getDeployVersions {
     NSArray *versions = [self getMyVersions];
     NSMutableArray *deployVersions = [[NSMutableArray alloc] initWithCapacity:5];
-
+    
     for (id version in versions) {
         NSArray *version_parts = [version componentsSeparatedByString:@"|"];
         NSString *version_uuid = version_parts[1];
         [deployVersions addObject:version_uuid];
     }
-
+    
     return deployVersions;
 }
 
@@ -511,7 +528,7 @@ static NSOperationQueue *delegateQueue;
     NSUserDefaults *prefs = [NSUserDefaults standardUserDefaults];
     NSArray *versions = [self getMyVersions];
     NSMutableArray *newVersions = [[NSMutableArray alloc] initWithCapacity:5];
-
+    
     for (id version in versions) {
         NSArray *version_parts = [version componentsSeparatedByString:@"|"];
         NSString *version_uuid = version_parts[1];
@@ -519,7 +536,7 @@ static NSOperationQueue *delegateQueue;
             [newVersions addObject:version];
         }
     }
-
+    
     [prefs setObject:newVersions forKey:@"my_versions"];
     [prefs synchronize];
 }
@@ -527,19 +544,19 @@ static NSOperationQueue *delegateQueue;
 
 - (bool) hasVersion:(NSString *) uuid {
     NSArray *versions = [self getMyVersions];
-
+    
     NSLog(@"Versions: %@", versions);
-
+    
     for (id version in versions) {
         NSArray *version_parts = [version componentsSeparatedByString:@"|"];
         NSString *version_uuid = version_parts[1];
-
+        
         NSLog(@"version_uuid: %@, uuid: %@", version_uuid, uuid);
         if ([version_uuid isEqualToString:uuid]) {
             return true;
         }
     }
-
+    
     return false;
 }
 
@@ -547,7 +564,7 @@ static NSOperationQueue *delegateQueue;
     NSString *uuid = [command.arguments objectAtIndex:1];
     BOOL success = [self removeVersion:uuid];
     CDVPluginResult *pluginResult = nil;
-
+    
     if (success) {
         pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
     } else {
@@ -559,37 +576,37 @@ static NSOperationQueue *delegateQueue;
 - (void) saveVersion:(NSString *) uuid {
     NSUserDefaults *prefs = [NSUserDefaults standardUserDefaults];
     NSMutableArray *versions = [self getMyVersions];
-
+    
     int versionCount = (int) [[NSUserDefaults standardUserDefaults] integerForKey:@"version_count"];
-
+    
     if (versionCount) {
         versionCount += 1;
     } else {
         versionCount = 1;
     }
-
+    
     [prefs setInteger:versionCount forKey:@"version_count"];
     [prefs synchronize];
-
+    
     NSString *versionString = [NSString stringWithFormat:@"%i|%@", versionCount, uuid];
-
+    
     [versions addObject:versionString];
-
+    
     [prefs setObject:versions forKey:@"my_versions"];
     [prefs synchronize];
-
+    
     [self cleanupVersions];
 }
 
 - (void) cleanupVersions {
     NSUserDefaults *prefs = [NSUserDefaults standardUserDefaults];
     NSMutableArray *versions = [self getMyVersions];
-
+    
     int versionCount = (int) [[NSUserDefaults standardUserDefaults] integerForKey:@"version_count"];
-
+    
     if (versionCount && versionCount > 3) {
         NSInteger threshold = versionCount - 3;
-
+        
         NSInteger count = [versions count];
         for (NSInteger index = (count - 1); index >= 0; index--) {
             NSString *versionString = versions[index];
@@ -600,7 +617,7 @@ static NSOperationQueue *delegateQueue;
                 [self removeVersion:version_parts[1]];
             }
         }
-
+        
         NSLog(@"Version Count: %i", (int) [versions count]);
         [prefs setObject:versions forKey:@"my_versions"];
         [prefs synchronize];
@@ -610,10 +627,10 @@ static NSOperationQueue *delegateQueue;
 - (BOOL) excludeVersionFromBackup:(NSString *) uuid {
     NSArray *paths = NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, YES);
     NSString *libraryDirectory = [paths objectAtIndex:0];
-
+    
     NSString *pathToFolder = [NSString stringWithFormat:@"%@/%@", libraryDirectory, uuid];
     NSURL *URL= [NSURL fileURLWithPath:pathToFolder];
-
+    
     NSError *error = nil;
     BOOL success = [URL setResourceValue:[NSNumber numberWithBool: YES] forKey: NSURLIsExcludedFromBackupKey error: &error];
     if(!success){
@@ -629,20 +646,20 @@ static NSOperationQueue *delegateQueue;
     NSString *currentUUID = [self getUUID];
     NSArray *paths = NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, YES);
     NSString *libraryDirectory = [paths objectAtIndex:0];
-
+    
     NSString *pathToFolder = [NSString stringWithFormat:@"%@/%@/", libraryDirectory, uuid];
-
+    
     if ([uuid isEqualToString: currentUUID]) {
         [prefs setObject: @"" forKey: @"uuid"];
         [prefs synchronize];
     }
-
+    
     BOOL success = [[NSFileManager defaultManager] removeItemAtPath:pathToFolder error:nil];
-
+    
     if(success) {
         [self removeVersionFromPreferences:uuid];
     }
-
+    
     NSLog(@"Removed Version %@ success? %d", uuid, success);
     return success;
 }
@@ -655,16 +672,16 @@ static NSOperationQueue *delegateQueue;
     // filename is retrieved from `download.filename`
     // the bytes downloaded thus far is `download.progressContentLength`
     // if the server reported the size of the file, it is returned by `download.expectedContentLength`
-
+    
     self.progress = ((100.0 / download.expectedContentLength) * download.progressContentLength);
-
+    
     NSLog(@"Download Progress: %.0f%%", ((100.0 / download.expectedContentLength) * download.progressContentLength));
-
+    
     CDVPluginResult* pluginResult = nil;
-
+    
     pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsInt:self.progress];
     [pluginResult setKeepCallbackAsBool:TRUE];
-
+    
     [self.commandDelegate sendPluginResult:pluginResult callbackId:self.callbackId];
 }
 
@@ -672,7 +689,7 @@ static NSOperationQueue *delegateQueue;
     NSLog(@"Download Error");
     CDVPluginResult* pluginResult = nil;
     pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"download error"];
-
+    
     [self.commandDelegate sendPluginResult:pluginResult callbackId:self.callbackId];
 }
 
@@ -682,15 +699,15 @@ static NSOperationQueue *delegateQueue;
     NSUserDefaults *prefs = [NSUserDefaults standardUserDefaults];
     NSString *uuid = [[NSUserDefaults standardUserDefaults] objectForKey:@"uuid"];
     NSString *upstream_uuid = [[NSUserDefaults standardUserDefaults] objectForKey:@"upstream_uuid"];
-
+    
     [prefs setObject: upstream_uuid forKey: @"uuid"];
     [prefs synchronize];
-
+    
     NSLog(@"UUID is: %@ and upstream_uuid is: %@", uuid, upstream_uuid);
     NSLog(@"Download Finished...");
     CDVPluginResult* pluginResult = nil;
     pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"true"];
-
+    
     [self.commandDelegate sendPluginResult:pluginResult callbackId:self.callbackId];
 }
 
@@ -699,19 +716,19 @@ static NSOperationQueue *delegateQueue;
 - (void)zipArchiveProgressEvent:(NSInteger)loaded total:(NSInteger)total {
     float progress = ((100.0 / total) * loaded);
     NSLog(@"Zip Extraction: %.0f%%", progress);
-
+    
     CDVPluginResult* pluginResult = nil;
-
+    
     pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsInt:progress];
     [pluginResult setKeepCallbackAsBool:TRUE];
-
+    
     [self.commandDelegate sendPluginResult:pluginResult callbackId:self.callbackId];
-
+    
     if (progress == 100) {
         CDVPluginResult* pluginResult = nil;
-
+        
         pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"done"];
-
+        
         [self.commandDelegate sendPluginResult:pluginResult callbackId:self.callbackId];
     }
 }
