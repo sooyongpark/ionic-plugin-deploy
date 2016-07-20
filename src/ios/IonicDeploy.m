@@ -41,6 +41,32 @@ static NSOperationQueue *delegateQueue;
 
 - (void) pluginInitialize {
     NSUserDefaults *prefs = [NSUserDefaults standardUserDefaults];
+    
+    // Make sure there's a cordova.js
+    NSString *htmlData = [NSString
+                          stringWithContentsOfFile:[[NSBundle mainBundle] pathForResource:@"www/index" ofType:@"html"]
+                          encoding:NSUTF8StringEncoding
+                          error:nil];
+    NSError *error = nil;
+    NSRegularExpression *extantRegex = [NSRegularExpression
+                                        regularExpressionWithPattern:@"<script src=(\"|')cordova\\.js.*(\"|')>.*</script>"
+                                        options:NSRegularExpressionCaseInsensitive
+                                        error:&error];
+    NSArray *matches = [extantRegex matchesInString:htmlData options:0 range:NSMakeRange(0, [htmlData length])];
+    if (!matches.count){
+        // We need to add a base cordova.js
+        // cordova.js isn't present, need to inject. We'll just put it after the first <script> tag we find
+        NSRegularExpression *scriptRegex = [NSRegularExpression
+                                            regularExpressionWithPattern:@"<script.*>.*</script>"
+                                            options:NSRegularExpressionCaseInsensitive
+                                            error:&error];
+        NSTextCheckingResult *match = [scriptRegex
+                                       firstMatchInString:htmlData
+                                       options:NSRegularExpressionCaseInsensitive
+                                       range:NSMakeRange(0, [htmlData length])];
+        
+    }
+    
     self.cordova_js_resource = [[NSBundle mainBundle] pathForResource:@"www/cordova" ofType:@"js"];
     self.serialQueue = dispatch_queue_create("Deploy Plugin Queue", NULL);
     self.version_label = [prefs stringForKey:@"ionicdeploy_version_label"];
@@ -399,18 +425,57 @@ static NSOperationQueue *delegateQueue;
                 
                 self.currentUUID = uuid;
                 
-                // Load the target index.html
-                NSString *htmlData = [NSString stringWithContentsOfFile:components.path];
-                
-                // Create a regex to find cordova.js
+                // Load the target index.html and init values
+                NSString *htmlData = [NSString stringWithContentsOfFile:components.path encoding:NSUTF8StringEncoding error:nil];
+                NSString *newReference = [NSString stringWithFormat:@"<script src=\"%@\"></script>", self.cordova_js_resource];
                 NSError *error = nil;
-                NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:@"&[^;]*;" options:NSRegularExpressionCaseInsensitive error:&error];
                 
-                // Modify index.html's cordova.js tag
-                NSString *newHtmlIndex = [regex stringByReplacingMatchesInString:htmlData options:0 range:NSMakeRange(0, [htmlData length]) withTemplate:@""];
+                // Ensure cordova.js isn't commented out
+                NSRegularExpression *commentedRegex = [NSRegularExpression
+                                                       regularExpressionWithPattern:@"<!--.*<script src=(\"|').*cordova\\.js.*(\"|')>.*</script>.*-->"
+                                                       options:NSRegularExpressionCaseInsensitive
+                                                       error:&error];
+                NSArray *matches = [commentedRegex matchesInString:htmlData options:0 range:NSMakeRange(0, [htmlData length])];
+                if (matches && matches.count){
+                    // It was commented out, uncomment and update it.
+                    htmlData = [commentedRegex
+                                stringByReplacingMatchesInString:htmlData options:0
+                                range:NSMakeRange(0, [htmlData length])
+                                withTemplate:newReference];
+                } else {
+                    // We need to inject the script tag and/or update an existing one.
+                    NSRegularExpression *cordovaRegex = [NSRegularExpression
+                                                         regularExpressionWithPattern:@"<script src=(\"|').*cordova\\.js.*(\"|')>.*</script>"
+                                                         options:NSRegularExpressionCaseInsensitive
+                                                         error:&error];
+                    matches = [cordovaRegex matchesInString:htmlData options:0 range:NSMakeRange(0, [htmlData length])];
+                    if (matches && matches.count){
+                        // We found the script, update it
+                        htmlData = [cordovaRegex
+                                    stringByReplacingMatchesInString:htmlData
+                                    options:0
+                                    range:NSMakeRange(0, [htmlData length])
+                                    withTemplate:newReference];
+                    } else {
+                        // cordova.js isn't present, need to inject. We'll just put it after the first <script> tag we find
+                        NSRegularExpression *scriptRegex = [NSRegularExpression
+                                                            regularExpressionWithPattern:@"<script.*>.*</script>"
+                                                            options:NSRegularExpressionCaseInsensitive
+                                                            error:&error];
+                        NSTextCheckingResult *match = [scriptRegex
+                                                       firstMatchInString:htmlData
+                                                       options:NSRegularExpressionCaseInsensitive
+                                                       range:NSMakeRange(0, [htmlData length])];
+                        NSString *injectedScript = [NSString stringWithFormat:@"%@\n%@\n", [htmlData substringWithRange:[match rangeAtIndex:0]], newReference];
+                        htmlData = [htmlData
+                                    stringByReplacingOccurrencesOfString:[htmlData substringWithRange:[match rangeAtIndex:0]]
+                                    withString:injectedScript];
+                    }
+                }
+
                 
-                // Write new index.html
-                [newHtmlIndex writeToFile:components.path atomically:TRUE encoding:NSUTF8StringEncoding error:NULL];
+                // Write new index
+                [htmlData writeToFile:components.path atomically:YES encoding:NSUTF8StringEncoding error:nil];
                 
                 // Do redirect
                 NSLog(@"Redirecting to: %@", components.URL.absoluteString);
