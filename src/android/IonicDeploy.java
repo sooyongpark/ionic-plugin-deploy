@@ -23,6 +23,7 @@ import java.io.BufferedOutputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.File;
+import java.io.FileWriter;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -77,6 +78,15 @@ public class IonicDeploy extends CordovaPlugin {
     this.prefs = getPreferences();
     this.v = webView;
     this.version_label = prefs.getString("ionicdeploy_version_label", IonicDeploy.NO_DEPLOY_LABEL);
+
+    // Parse new index as a string and update the cordova.js reference
+    String newIndex = this.updateIndexCordovaReference(this.getStringFromFile("file:///android_asset/www/index.html"));
+
+    // Save the new index.html
+    FileWriter fw = new FileWriter(deploy_url);
+    fw.write(newIndex);
+    fw.close();
+
     this.initVersionChecks();
   }
 
@@ -730,8 +740,13 @@ public class IonicDeploy extends CordovaPlugin {
       final File versionDir = this.myContext.getDir(uuid, Context.MODE_PRIVATE);
       final String deploy_url = versionDir.toURI() + "index.html";
 
-      // Parse new index as a string
+      // Parse new index as a string and update the cordova.js reference
       String newIndex = this.updateIndexCordovaReference(this.getStringFromFile(deploy_url));
+
+      // Save the new index.html
+      FileWriter fw = new FileWriter(deploy_url);
+      fw.write(newIndex);
+      fw.close();
 
       cordova.getActivity().runOnUiThread(new Runnable() {
         @Override
