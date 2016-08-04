@@ -34,6 +34,7 @@ import java.net.URL;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.Iterator;
+import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 import java.util.zip.ZipInputStream;
@@ -729,6 +730,9 @@ public class IonicDeploy extends CordovaPlugin {
       final File versionDir = this.myContext.getDir(uuid, Context.MODE_PRIVATE);
       final String deploy_url = versionDir.toURI() + "index.html";
 
+      // Parse new index as a string
+      String newIndex = this.updateIndexCordovaReference(this.getStringFromFile(deploy_url));
+
       cordova.getActivity().runOnUiThread(new Runnable() {
         @Override
         public void run() {
@@ -738,6 +742,84 @@ public class IonicDeploy extends CordovaPlugin {
         }
       });
     }
+  }
+
+  /**
+   * Takes an index.html file parsed as a string and updates any extant references to cordova.js contained within to be 
+   * valid for deploy.
+   *
+   * @param indexStr the string contents of index.html
+   * @return the updated string index.html
+   **/
+  private static String updateIndexCordovaReference(String indexStr) {
+    // Init the new script
+    String newReference = "<script src=\"file:///android_asset/www/cordova.js\"></script>";
+
+    // Define regular expressions
+    String commentedRegexString = "<!--.*<script src=(\"|').*cordova\\.js.*(\"|')>.*</script>.*-->";  // Find commented cordova.js
+    String cordovaRegexString = "<script src=(\"|').*cordova\\.js.*(\"|')>.*</script>";  // Find cordova.js
+    String scriptRegexString = "<script.*>.*</script>";  // Find a script tag
+
+    // Compile the regexes
+    Pattern commentedRegex = Pattern.compile(commentedRegexString);
+    Pattern cordovaRegex = Pattern.compile(cordovaRegexString);
+    Pattern scriptRegex = Pattern.compile(scriptRegexString);
+
+    // First, make sure cordova.js isn't commented out.
+    if (commentedRegex.matcher(indexStr).find()) {
+      // It is, let's uncomment it.
+      indexStr = indexStr.replaceAll(commentedRegexString, newReference);
+    } else {
+      // It's either uncommented or missing
+      // First let's see if it's uncommented
+      if (cordovaRegex.matcher(indexStr).find()) {
+        // We found an extant cordova.js, update it
+        indexStr = indexStr.replaceAll(cordovaRegexString, newReference);
+      } else {
+        // No cordova.js, gotta inject it!
+        // First, find the first script tag we can
+        Matcher scriptMatcher = scriptRegex.matcher(indexStr);
+        if (scriptMatcher.find()) {
+          // Got the script, add cordova.js below it
+          String newScriptTag = String.format("%s\n%s\n", scriptMatcher.group(0), newReference);
+        }
+      }
+    }
+
+    return indexStr;
+  }
+
+  /**
+   * Reads form an InputStream and returns the contents as a string.
+   *
+   * @param is the InputStream to read from
+   * @return the string contents of is
+   **/
+  private static String convertStreamToString(InputStream is) throws Exception {
+    BufferedReader reader = new BufferedReader(new InputStreamReader(is));
+    StringBuilder sb = new StringBuilder();
+    String line = null;
+    while ((line = reader.readLine()) != null) {
+      sb.append(line).append("\n");
+    }
+    reader.close();
+    
+    return sb.toString();
+  }
+
+  /**
+   * Returns the data contained at filePath as a string
+   *
+   * @param filePath the URL of the file to read
+   * @return the string contents of filePath
+   **/
+  private static String getStringFromFile (String filePath) throws Exception {
+    File fl = new File(filePath);
+    FileInputStream fin = new FileInputStream(fl);
+    String ret = this.convertStreamToString(fin);
+    fin.close();  
+
+    return ret;
   }
 
   private class DownloadTask extends AsyncTask<String, Integer, String> {
