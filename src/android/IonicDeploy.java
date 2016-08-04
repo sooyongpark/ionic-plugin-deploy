@@ -20,6 +20,7 @@ import org.json.JSONObject;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
+import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.File;
@@ -28,9 +29,11 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
+import java.util.regex.Matcher;
 import java.net.URL;
 import java.util.HashSet;
 import java.util.Set;
@@ -45,7 +48,6 @@ class JsonHttpResponse {
   Boolean error;
   JSONObject json;
 }
-
 
 public class IonicDeploy extends CordovaPlugin {
   String server = "https://api.ionic.io";
@@ -66,6 +68,39 @@ public class IonicDeploy extends CordovaPlugin {
   public static final int VERSION_BEHIND = -1;
 
   /**
+   * Reads form an InputStream and returns the contents as a string.
+   *
+   * @param is the InputStream to read from
+   * @return the string contents of is
+   **/
+  private static String convertStreamToString(InputStream is) throws Exception {
+    BufferedReader reader = new BufferedReader(new InputStreamReader(is));
+    StringBuilder sb = new StringBuilder();
+    String line = null;
+    while ((line = reader.readLine()) != null) {
+      sb.append(line).append("\n");
+    }
+    reader.close();
+    
+    return sb.toString();
+  }
+
+  /**
+   * Returns the data contained at filePath as a string
+   *
+   * @param filePath the URL of the file to read
+   * @return the string contents of filePath
+   **/
+  private static String getStringFromFile (String filePath) throws Exception {
+    File fl = new File(filePath);
+    FileInputStream fin = new FileInputStream(fl);
+    String ret = convertStreamToString(fin);
+    fin.close();  
+
+    return ret;
+  }
+
+  /**
    * Sets the context of the Command. This can then be used to do things like
    * get file paths associated with the Activity.
    *
@@ -79,13 +114,17 @@ public class IonicDeploy extends CordovaPlugin {
     this.v = webView;
     this.version_label = prefs.getString("ionicdeploy_version_label", IonicDeploy.NO_DEPLOY_LABEL);
 
-    // Parse new index as a string and update the cordova.js reference
-    String newIndex = this.updateIndexCordovaReference(this.getStringFromFile("file:///android_asset/www/index.html"));
+    try {
+      // Parse new index as a string and update the cordova.js reference
+      String newIndex = this.updateIndexCordovaReference(getStringFromFile("file:///android_asset/www/index.html"));
 
-    // Save the new index.html
-    FileWriter fw = new FileWriter(deploy_url);
-    fw.write(newIndex);
-    fw.close();
+      // Save the new index.html
+      FileWriter fw = new FileWriter("file:///android_asset/www/index.html");
+      fw.write(newIndex);
+      fw.close();
+    } catch (Exception e) {
+      logMessage("INIT", "Could not update cordova.js");
+    }
 
     this.initVersionChecks();
   }
@@ -740,13 +779,17 @@ public class IonicDeploy extends CordovaPlugin {
       final File versionDir = this.myContext.getDir(uuid, Context.MODE_PRIVATE);
       final String deploy_url = versionDir.toURI() + "index.html";
 
-      // Parse new index as a string and update the cordova.js reference
-      String newIndex = this.updateIndexCordovaReference(this.getStringFromFile(deploy_url));
+      try {
+        // Parse new index as a string and update the cordova.js reference
+        String newIndex = this.updateIndexCordovaReference(getStringFromFile(deploy_url));
 
-      // Save the new index.html
-      FileWriter fw = new FileWriter(deploy_url);
-      fw.write(newIndex);
-      fw.close();
+        // Save the new index.html
+        FileWriter fw = new FileWriter(deploy_url);
+        fw.write(newIndex);
+        fw.close();
+      } catch (Exception e) {
+        logMessage("REDIRECT", "Could not update cordova.js");
+      }
 
       cordova.getActivity().runOnUiThread(new Runnable() {
         @Override
@@ -802,39 +845,6 @@ public class IonicDeploy extends CordovaPlugin {
     }
 
     return indexStr;
-  }
-
-  /**
-   * Reads form an InputStream and returns the contents as a string.
-   *
-   * @param is the InputStream to read from
-   * @return the string contents of is
-   **/
-  private static String convertStreamToString(InputStream is) throws Exception {
-    BufferedReader reader = new BufferedReader(new InputStreamReader(is));
-    StringBuilder sb = new StringBuilder();
-    String line = null;
-    while ((line = reader.readLine()) != null) {
-      sb.append(line).append("\n");
-    }
-    reader.close();
-    
-    return sb.toString();
-  }
-
-  /**
-   * Returns the data contained at filePath as a string
-   *
-   * @param filePath the URL of the file to read
-   * @return the string contents of filePath
-   **/
-  private static String getStringFromFile (String filePath) throws Exception {
-    File fl = new File(filePath);
-    FileInputStream fin = new FileInputStream(fl);
-    String ret = this.convertStreamToString(fin);
-    fin.close();  
-
-    return ret;
   }
 
   private class DownloadTask extends AsyncTask<String, Integer, String> {
