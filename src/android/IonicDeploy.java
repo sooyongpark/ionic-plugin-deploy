@@ -123,10 +123,10 @@ public class IonicDeploy extends CordovaPlugin {
    * get file paths associated with the Activity.
    *
    * @param cordova The context of the main Activity.
-   * @param webView The CordovaWebView Cordova is running in.
+   * @param cWebView The CordovaWebView Cordova is running in.
    */
-  public void initialize(CordovaInterface cordova, CordovaWebView webView) {
-    super.initialize(cordova, webView);
+  public void initialize(CordovaInterface cordova, CordovaWebView cWebView) {
+    super.initialize(cordova, cWebView);
     this.myContext = this.cordova.getActivity().getApplicationContext();
     this.prefs = getPreferences();
     this.v = webView;
@@ -819,14 +819,14 @@ public class IonicDeploy extends CordovaPlugin {
     if (!uuid.equals("") && !this.ignore_deploy && !uuid.equals(ignore)) {
       prefs.edit().putString("uuid", uuid).apply();
       final File versionDir = this.myContext.getDir(uuid, Context.MODE_PRIVATE);
-      final String deploy_url = versionDir.toURI() + "index.html";
 
       try {
         // Parse new index as a string and update the cordova.js reference
-        String newIndex = this.updateIndexCordovaReference(getStringFromFile(deploy_url));
+        File newIndexFile = new File(versionDir, "index.html");
+        final String indexLocation = newIndexFile.toURI().toString();
+        String newIndex = this.updateIndexCordovaReference(getStringFromFile(indexLocation));
 
         // Create the file and directory, if need be 
-        File newIndexFile = new File(versionDir, "index.html");
         versionDir.mkdirs();
         newIndexFile.createNewFile();
 
@@ -834,18 +834,19 @@ public class IonicDeploy extends CordovaPlugin {
         FileWriter fw = new FileWriter(newIndexFile);
         fw.write(newIndex);
         fw.close();
+
+        // Load in the new index.html
+        cordova.getActivity().runOnUiThread(new Runnable() {
+          @Override
+          public void run() {
+            logMessage("REDIRECT", "Loading deploy version: " + uuid);
+            prefs.edit().putString("loaded_uuid", uuid).apply();
+            webView.loadUrlIntoView(indexLocation, recreatePlugins);
+          }
+        });
       } catch (Exception e) {
         logMessage("REDIRECT", "Pre-redirect cordova injection exception: " + Log.getStackTraceString(e));
       }
-
-      cordova.getActivity().runOnUiThread(new Runnable() {
-        @Override
-        public void run() {
-          logMessage("REDIRECT", "Loading deploy version: " + uuid);
-          prefs.edit().putString("loaded_uuid", uuid).apply();
-          webView.loadUrlIntoView(deploy_url, recreatePlugins);
-        }
-      });
     }
   }
 
