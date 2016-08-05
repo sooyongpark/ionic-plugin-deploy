@@ -25,6 +25,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileWriter;
+import java.io.FileReader;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -35,6 +36,8 @@ import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.util.regex.Matcher;
 import java.net.URL;
+import java.net.URI;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.Iterator;
@@ -60,6 +63,7 @@ public class IonicDeploy extends CordovaPlugin {
   boolean ignore_deploy = false;
   JSONObject last_update;
 
+  public static final String INDEX_UPDATED = "INDEX_UPDATED";
   public static final String NO_DEPLOY_LABEL = "NO_DEPLOY_LABEL";
   public static final String NO_DEPLOY_AVAILABLE = "NO_DEPLOY_AVAILABLE";
   public static final String NOTHING_TO_IGNORE = "NOTHING_TO_IGNORE";
@@ -68,36 +72,50 @@ public class IonicDeploy extends CordovaPlugin {
   public static final int VERSION_BEHIND = -1;
 
   /**
-   * Reads form an InputStream and returns the contents as a string.
-   *
-   * @param is the InputStream to read from
-   * @return the string contents of is
-   **/
-  private static String convertStreamToString(InputStream is) throws Exception {
-    BufferedReader reader = new BufferedReader(new InputStreamReader(is));
-    StringBuilder sb = new StringBuilder();
-    String line = null;
-    while ((line = reader.readLine()) != null) {
-      sb.append(line).append("\n");
-    }
-    reader.close();
-    
-    return sb.toString();
-  }
-
-  /**
    * Returns the data contained at filePath as a string
    *
    * @param filePath the URL of the file to read
    * @return the string contents of filePath
    **/
   private static String getStringFromFile (String filePath) throws Exception {
-    File fl = new File(filePath);
-    FileInputStream fin = new FileInputStream(fl);
-    String ret = convertStreamToString(fin);
-    fin.close();  
+    // Grab the file and init vars
+    URI uri = URI.create(filePath);
+    File file = new File(uri);
+    StringBuilder text = new StringBuilder();
+    BufferedReader br = new BufferedReader(new FileReader(file));
+    String line;
 
-    return ret;
+    //Read text from file
+    while ((line = br.readLine()) != null) {
+      text.append(line);
+      text.append('\n');
+    }
+    br.close();
+
+    return text.toString();
+  }
+
+  /**
+   * Returns the data contained within cordova's assets at assetName as a string
+   *
+   * @param assetName the URL of the file to read
+   * @return the string contents of filePath
+   **/
+  private String getStringFromAsset (String assetName) throws Exception {
+    // Init vars and load assets
+    StringBuilder text = new StringBuilder();
+    InputStream asset = this.myContext.getAssets().open("www/" + assetName);
+    BufferedReader in = new BufferedReader(new InputStreamReader(asset, "UTF-8"));
+    String str;
+
+    // Load the lines
+    while ((str=in.readLine()) != null) {
+      text.append(str);
+      text.append('\n');
+    }
+    in.close();
+
+    return text.toString();
   }
 
   /**
@@ -113,20 +131,41 @@ public class IonicDeploy extends CordovaPlugin {
     this.prefs = getPreferences();
     this.v = webView;
     this.version_label = prefs.getString("ionicdeploy_version_label", IonicDeploy.NO_DEPLOY_LABEL);
-
-    try {
-      // Parse new index as a string and update the cordova.js reference
-      String newIndex = this.updateIndexCordovaReference(getStringFromFile("file:///android_asset/www/index.html"));
-
-      // Save the new index.html
-      FileWriter fw = new FileWriter("file:///android_asset/www/index.html");
-      fw.write(newIndex);
-      fw.close();
-    } catch (Exception e) {
-      logMessage("INIT", "Could not update cordova.js");
-    }
-
     this.initVersionChecks();
+
+    // If we haven't fixed the cordova.js reference, let's do that
+    if (
+      this.prefs.getString("index_updated", "") != IonicDeploy.INDEX_UPDATED && this.version_label != IonicDeploy.NO_DEPLOY_LABEL) {
+      try {
+        // Parse new index as a string and update the cordova.js reference
+        String newIndex = this.updateIndexCordovaReference(getStringFromAsset("index.html"));
+
+        // Create the file and directory, if need be 
+        File newIndexDir = new File(this.myContext.getDir("new_index", Context.MODE_PRIVATE).toURI());
+        File newIndexFile = new File(newIndexDir, "index.html");
+        newIndexDir.mkdirs();
+        newIndexFile.createNewFile();
+
+        // Save our modified index.html 
+        FileWriter fw = new FileWriter(newIndexFile);
+        fw.write(newIndex);
+        fw.close();
+
+        // Save prefs and load our new index into the webview 
+        final String newIndexUrl = this.myContext.getDir("new_index", Context.MODE_PRIVATE).toURI() + "index.html";
+        final CordovaWebView wv = this.v;
+        this.prefs.edit().putString("index_updated", IonicDeploy.INDEX_UPDATED).apply();
+        this.cordova.getActivity().runOnUiThread(new Runnable() {
+          @Override
+          public void run() {
+            logMessage("INIT", "Loading updated index");
+            wv.loadUrlIntoView(newIndexUrl, true);
+          }
+        });
+      } catch (Exception e) {
+        logMessage("INIT", "Index update exception: " + Log.getStackTraceString(e));
+      }
+    }
   }
 
   private String getUUID() {
@@ -683,9 +722,6 @@ public class IonicDeploy extends CordovaPlugin {
       ZipInputStream zipInputStream = new ZipInputStream(inputStream);
       ZipEntry zipEntry = null;
 
-      // Get the full path to the internal storage
-      String filesDir = this.myContext.getFilesDir().toString();
-
       // Make the version directory in internal storage
       File versionDir = this.myContext.getDir(location, Context.MODE_PRIVATE);
 
@@ -771,8 +807,14 @@ public class IonicDeploy extends CordovaPlugin {
     callbackContext.success("done");
   }
 
-
+  /**
+   * Updates the new index.html, sets the active UUID, and redirects the webview to a given UUID's deploy.
+   *
+   * @param uuid the UUID of the deploy to redirect to
+   * @param recreatePlugins deprecated, here be dragons
+   **/
   private void redirect(final String uuid, final boolean recreatePlugins) {
+    // TODO: get rid of recreatePlugins
     String ignore = this.prefs.getString("ionicdeploy_version_ignore", IonicDeploy.NOTHING_TO_IGNORE);
     if (!uuid.equals("") && !this.ignore_deploy && !uuid.equals(ignore)) {
       prefs.edit().putString("uuid", uuid).apply();
@@ -783,12 +825,17 @@ public class IonicDeploy extends CordovaPlugin {
         // Parse new index as a string and update the cordova.js reference
         String newIndex = this.updateIndexCordovaReference(getStringFromFile(deploy_url));
 
+        // Create the file and directory, if need be 
+        File newIndexFile = new File(versionDir, "index.html");
+        versionDir.mkdirs();
+        newIndexFile.createNewFile();
+
         // Save the new index.html
-        FileWriter fw = new FileWriter(deploy_url);
+        FileWriter fw = new FileWriter(newIndexFile);
         fw.write(newIndex);
         fw.close();
       } catch (Exception e) {
-        logMessage("REDIRECT", "Could not update cordova.js");
+        logMessage("REDIRECT", "Pre-redirect cordova injection exception: " + Log.getStackTraceString(e));
       }
 
       cordova.getActivity().runOnUiThread(new Runnable() {
