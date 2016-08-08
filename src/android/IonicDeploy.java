@@ -96,29 +96,6 @@ public class IonicDeploy extends CordovaPlugin {
   }
 
   /**
-   * Returns the data contained within cordova's assets at assetName as a string
-   *
-   * @param assetName the URL of the file to read
-   * @return the string contents of filePath
-   **/
-  private String getStringFromAsset (String assetName) throws Exception {
-    // Init vars and load assets
-    StringBuilder text = new StringBuilder();
-    InputStream asset = this.myContext.getAssets().open("www/" + assetName);
-    BufferedReader in = new BufferedReader(new InputStreamReader(asset, "UTF-8"));
-    String str;
-
-    // Load the lines
-    while ((str=in.readLine()) != null) {
-      text.append(str);
-      text.append('\n');
-    }
-    in.close();
-
-    return text.toString();
-  }
-
-  /**
    * Sets the context of the Command. This can then be used to do things like
    * get file paths associated with the Activity.
    *
@@ -132,40 +109,6 @@ public class IonicDeploy extends CordovaPlugin {
     this.v = webView;
     this.version_label = prefs.getString("ionicdeploy_version_label", IonicDeploy.NO_DEPLOY_LABEL);
     this.initVersionChecks();
-
-    // If we haven't fixed the cordova.js reference, let's do that
-    if (
-      this.prefs.getString("index_updated", "") != IonicDeploy.INDEX_UPDATED && this.version_label != IonicDeploy.NO_DEPLOY_LABEL) {
-      try {
-        // Parse new index as a string and update the cordova.js reference
-        String newIndex = this.updateIndexCordovaReference(getStringFromAsset("index.html"));
-
-        // Create the file and directory, if need be 
-        File newIndexDir = new File(this.myContext.getDir("new_index", Context.MODE_PRIVATE).toURI());
-        File newIndexFile = new File(newIndexDir, "index.html");
-        newIndexDir.mkdirs();
-        newIndexFile.createNewFile();
-
-        // Save our modified index.html 
-        FileWriter fw = new FileWriter(newIndexFile);
-        fw.write(newIndex);
-        fw.close();
-
-        // Save prefs and load our new index into the webview 
-        final String newIndexUrl = this.myContext.getDir("new_index", Context.MODE_PRIVATE).toURI() + "index.html";
-        final CordovaWebView wv = this.v;
-        this.prefs.edit().putString("index_updated", IonicDeploy.INDEX_UPDATED).apply();
-        this.cordova.getActivity().runOnUiThread(new Runnable() {
-          @Override
-          public void run() {
-            logMessage("INIT", "Loading updated index");
-            wv.loadUrlIntoView(newIndexUrl, true);
-          }
-        });
-      } catch (Exception e) {
-        logMessage("INIT", "Index update exception: " + Log.getStackTraceString(e));
-      }
-    }
   }
 
   private String getUUID() {

@@ -41,47 +41,6 @@ static NSOperationQueue *delegateQueue;
 
 - (void) pluginInitialize {
     NSUserDefaults *prefs = [NSUserDefaults standardUserDefaults];
-
-    // Make sure there's a cordova.js
-    NSString *htmlData = [NSString
-                          stringWithContentsOfFile:[[NSBundle mainBundle] pathForResource:@"www/index" ofType:@"html"]
-                          encoding:NSUTF8StringEncoding
-                          error:nil];
-    NSError *error = nil;
-    NSRegularExpression *extantRegex = [NSRegularExpression
-                                        regularExpressionWithPattern:@"<script src=(\"|')cordova\\.js.*(\"|')>.*</script>"
-                                        options:NSRegularExpressionCaseInsensitive
-                                        error:&error];
-    NSArray *matches = [extantRegex matchesInString:htmlData options:0 range:NSMakeRange(0, [htmlData length])];
-    if (!matches.count){
-        // We need to add a base cordova.js, so we'll put it after the first <script> we see
-        NSLog(@"No cordova.js found, injecting...");
-
-        // Find a script
-        NSRegularExpression *scriptRegex = [NSRegularExpression
-                                            regularExpressionWithPattern:@"<script.*>.*</script>"
-                                            options:NSRegularExpressionCaseInsensitive
-                                            error:&error];
-        NSTextCheckingResult *match = [scriptRegex
-                                       firstMatchInString:htmlData
-                                       options:NSRegularExpressionCaseInsensitive
-                                       range:NSMakeRange(0, [htmlData length])];
-
-        // Add cordova.js below it.
-        NSString *injectedScript = [NSString
-                                    stringWithFormat:@"%@\n%@\n",
-                                    [htmlData substringWithRange:[match rangeAtIndex:0]],
-                                    @"<script src=\"cordova.js\"></script>"];
-
-        // Add our new script tag to the index.html string
-        htmlData = [htmlData
-                    stringByReplacingOccurrencesOfString:[htmlData substringWithRange:[match rangeAtIndex:0]]
-                    withString:injectedScript];
-
-        // Write new index.html
-        [htmlData writeToFile:[[NSBundle mainBundle] pathForResource:@"www/index" ofType:@"html"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
-    }
-
     self.cordova_js_resource = [[NSBundle mainBundle] pathForResource:@"www/cordova" ofType:@"js"];
     self.serialQueue = dispatch_queue_create("Deploy Plugin Queue", NULL);
     self.version_label = [prefs stringForKey:@"ionicdeploy_version_label"];
