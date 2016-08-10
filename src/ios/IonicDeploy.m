@@ -456,7 +456,6 @@ static NSOperationQueue *delegateQueue;
 
                 // Do redirect
                 NSLog(@"Redirecting to: %@", components.URL.absoluteString);
-
                 SEL wkWebViewSelector = NSSelectorFromString(@"loadFileURL:allowingReadAccessToURL:");
 
                 if ([self.webView respondsToSelector:wkWebViewSelector]) {
