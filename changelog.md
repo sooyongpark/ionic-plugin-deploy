@@ -1,6 +1,12 @@
 Changelog
 =========
 
+## 0.6.0
+
+* Ionic 2 support
+* (fix) Webview is now reloaded on a redirect - PR #80
+* **(breaking)** You **must** include `cordova.js` in your `index.html` for full plugin support.
+
 ## 0.5.7
 
 * Expose new `parseUpdate()` method for custom remote support - PR #76
