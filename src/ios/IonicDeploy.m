@@ -27,6 +27,7 @@ typedef struct JsonHttpResponse {
 @property NSString *currentUUID;
 @property dispatch_queue_t serialQueue;
 @property NSString *cordova_js_resource;
+@property NSString *index_html_resource;
 @property NSString *deploy_server;
 
 // private
@@ -46,6 +47,7 @@ static NSOperationQueue *delegateQueue;
     if(self.version_label == nil) {
         self.version_label = NO_DEPLOY_LABEL;
     }
+
     [self initVersionChecks];
 }
 
@@ -151,7 +153,6 @@ static NSOperationQueue *delegateQueue;
         NSError *jsonError = nil;
 
         result.message = nil;
-        // https://stackoverflow.com/questions/20374986/
         result.json = [NSJSONSerialization JSONObjectWithData:jsonData options:0 error:&jsonError];
 
         NSLog(@"JSON Error: %@", jsonError);
@@ -170,9 +171,7 @@ static NSOperationQueue *delegateQueue;
 // private
 - (void) handleCheckResponse:(JsonHttpResponse)result callbackId:(NSString *)callbackId {
     CDVPluginResult* pluginResult = nil;
-
     NSUserDefaults *prefs = [NSUserDefaults standardUserDefaults];
-
     NSString *our_version = [[NSUserDefaults standardUserDefaults] objectForKey:@"uuid"];
 
     if(result.json != nil) {
@@ -269,14 +268,11 @@ static NSOperationQueue *delegateQueue;
         } else {
             NSArray *paths = NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, YES);
             NSString *libraryDirectory = [paths objectAtIndex:0];
-
             NSString *uuid = [[NSUserDefaults standardUserDefaults] objectForKey:@"uuid"];
-
             NSString *filePath = [NSString stringWithFormat:@"%@/%@", libraryDirectory, @"www.zip"];
             NSString *extractPath = [NSString stringWithFormat:@"%@/%@/", libraryDirectory, uuid];
 
             NSLog(@"Path for zip file: %@", filePath);
-
             NSLog(@"Unzipping...");
 
             [SSZipArchive unzipFileAtPath:filePath toDestination:extractPath delegate:self];
@@ -337,7 +333,6 @@ static NSOperationQueue *delegateQueue;
         NSString *endpoint = [NSString stringWithFormat:@"/deploy/snapshots/%@?app_id=%@", formattedUUID.lowercaseString, self.appId];
         NSString *url = [NSString stringWithFormat:@"%@%@", baseUrl, endpoint];
         NSDictionary* headers = @{@"Content-Type": @"application/json", @"accept": @"application/json"};
-
         NSError *httpError = nil;
 
         UNIHTTPJsonResponse *result = [[UNIRest get:^(UNISimpleRequest *request) {
@@ -351,8 +346,8 @@ static NSOperationQueue *delegateQueue;
             NSDictionary *resp = [response.json objectForKey: @"data"];
             NSDictionary *metadata = [resp objectForKey:@"user_metadata"];
             NSDictionary *res = @{
-                @"metadata": metadata
-            };
+                                  @"metadata": metadata
+                                  };
             pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:res];
         }
         @catch (NSException *exception) {
@@ -375,51 +370,113 @@ static NSOperationQueue *delegateQueue;
     if (ignore == nil) {
         ignore = NOTHING_TO_IGNORE;
     }
+
     NSLog(@"uuid is: %@", uuid);
     if (self.ignore_deploy) {
-       NSLog(@"ignore deploy");
+        NSLog(@"ignore deploy");
     }
+
     NSLog(@"ignore version: %@", ignore);
     if (![uuid isEqualToString:@""] && !self.ignore_deploy && ![uuid isEqualToString:ignore]) {
-
         dispatch_async(self.serialQueue, ^{
-        if ( uuid != nil && ![self.currentUUID isEqualToString: uuid] ) {
-            NSArray *paths = NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, YES);
-            NSString *libraryDirectory = [paths objectAtIndex:0];
+            if ( uuid != nil && ![self.currentUUID isEqualToString: uuid] ) {
+                NSArray *paths = NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, YES);
+                NSString *libraryDirectory = [paths objectAtIndex:0];
+                NSString *query = [NSString stringWithFormat:@"cordova_js_bootstrap_resource=%@", self.cordova_js_resource];
+
+                NSURLComponents *components = [NSURLComponents new];
+                components.scheme = @"file";
+                components.path = [NSString stringWithFormat:@"%@/%@/index.html", libraryDirectory, uuid];
+                components.query = query;
+
+                self.currentUUID = uuid;
+
+                // Load the target index.html and init values
+                NSString *htmlData = [NSString
+                                      stringWithContentsOfFile:components.path
+                                      encoding:NSUTF8StringEncoding
+                                      error:nil];
+                NSString *newReference = [NSString
+                                          stringWithFormat:@"<script src=\"%@\"></script>", self.cordova_js_resource];
+                NSError *error = nil;
+
+                // Ensure cordova.js isn't commented out
+                NSRegularExpression *commentedRegex = [NSRegularExpression
+                                                       regularExpressionWithPattern:@"<!--.*<script src=(\"|').*cordova\\.js.*(\"|')>.*</script>.*-->"
+                                                       options:NSRegularExpressionCaseInsensitive
+                                                       error:&error];
+                NSArray *matches = [commentedRegex
+                                    matchesInString:htmlData
+                                    options:0
+                                    range:NSMakeRange(0, [htmlData length])];
+                if (matches && matches.count){
+                    // It was commented out, uncomment and update it.
+                    htmlData = [commentedRegex
+                                stringByReplacingMatchesInString:htmlData options:0
+                                range:NSMakeRange(0, [htmlData length])
+                                withTemplate:newReference];
+                } else {
+                    // We need to inject the script tag and/or update an existing one.
+                    // First, find an existing cordova.js tag
+                    NSRegularExpression *cordovaRegex = [NSRegularExpression
+                                                         regularExpressionWithPattern:@"<script src=(\"|').*cordova\\.js.*(\"|')>.*</script>"
+                                                         options:NSRegularExpressionCaseInsensitive
+                                                         error:&error];
+                    matches = [cordovaRegex matchesInString:htmlData options:0 range:NSMakeRange(0, [htmlData length])];
+                    if (matches && matches.count){
+                        // We found the script, update it
+                        htmlData = [cordovaRegex
+                                    stringByReplacingMatchesInString:htmlData
+                                    options:0
+                                    range:NSMakeRange(0, [htmlData length])
+                                    withTemplate:newReference];
+                    } else {
+                        // cordova.js isn't present, need to inject. We'll just put it after the first <script> tag we find
+                        NSRegularExpression *scriptRegex = [NSRegularExpression
+                                                            regularExpressionWithPattern:@"<script.*>.*</script>"
+                                                            options:NSRegularExpressionCaseInsensitive
+                                                            error:&error];
+                        NSTextCheckingResult *match = [scriptRegex
+                                                       firstMatchInString:htmlData
+                                                       options:NSRegularExpressionCaseInsensitive
+                                                       range:NSMakeRange(0, [htmlData length])];
+
+                        // Add our script after the one we matched
+                        NSString *injectedScript = [NSString stringWithFormat:@"%@\n%@\n", [htmlData substringWithRange:[match rangeAtIndex:0]], newReference];
+                        // Update the index.html string with our script
+                        htmlData = [htmlData
+                                    stringByReplacingOccurrencesOfString:[htmlData substringWithRange:[match rangeAtIndex:0]]
+                                    withString:injectedScript];
+                    }
+                }
 
 
-            NSString *query = [NSString stringWithFormat:@"cordova_js_bootstrap_resource=%@", self.cordova_js_resource];
+                // Write new index.html
+                [htmlData writeToFile:components.path atomically:YES encoding:NSUTF8StringEncoding error:nil];
 
-            NSURLComponents *components = [NSURLComponents new];
-            components.scheme = @"file";
-            components.path = [NSString stringWithFormat:@"%@/%@/index.html", libraryDirectory, uuid];
-            components.query = query;
+                // Do redirect
+                NSLog(@"Redirecting to: %@", components.URL.absoluteString);
+                SEL wkWebViewSelector = NSSelectorFromString(@"loadFileURL:allowingReadAccessToURL:");
 
-            self.currentUUID = uuid;
+                if ([self.webView respondsToSelector:wkWebViewSelector]) {
+                    NSURL *readAccessUrl = [components.URL URLByDeletingLastPathComponent];
+                    ((id (*)(id, SEL, id, id))objc_msgSend)(self.webView, wkWebViewSelector, components.URL, readAccessUrl);
 
-            NSLog(@"Redirecting to: %@", components.URL.absoluteString);
+                    dispatch_async(dispatch_get_main_queue(), ^(void){
+                        NSLog(@"Reloading the WKWebView.");
+                        SEL wkWebViewReloadSelector = NSSelectorFromString(@"reload");
+                        ((id (*)(id, SEL))objc_msgSend)(self.webView, wkWebViewReloadSelector);
+                    });
+                }
+                else {
+                    [((UIWebView*)self.webView) loadRequest: [NSURLRequest requestWithURL:components.URL] ];
 
-            SEL wkWebViewSelector = NSSelectorFromString(@"loadFileURL:allowingReadAccessToURL:");
-
-            if ([self.webView respondsToSelector:wkWebViewSelector]) {
-                NSURL *readAccessUrl = [components.URL URLByDeletingLastPathComponent];
-                ((id (*)(id, SEL, id, id))objc_msgSend)(self.webView, wkWebViewSelector, components.URL, readAccessUrl);
-
-                dispatch_async(dispatch_get_main_queue(), ^(void){
-                    NSLog(@"Reloading the WKWebView.");
-                    SEL wkWebViewReloadSelector = NSSelectorFromString(@"reload");
-                    ((id (*)(id, SEL))objc_msgSend)(self.webView, wkWebViewReloadSelector);
-                });
+                    dispatch_async(dispatch_get_main_queue(), ^(void){
+                        NSLog(@"Reloading the UIWebView.");
+                        [((UIWebView*)self.webView) reload];
+                    });
+                }
             }
-            else {
-                [((UIWebView*)self.webView) loadRequest: [NSURLRequest requestWithURL:components.URL] ];
-
-                dispatch_async(dispatch_get_main_queue(), ^(void){
-                    NSLog(@"Reloading the UIWebView.");
-                    [((UIWebView*)self.webView) reload];
-                });
-            }
-        }
         });
     }
 }
@@ -433,25 +490,25 @@ static NSOperationQueue *delegateQueue;
     NSString *app_version = [[self deconstructVersionLabel:self.version_label] firstObject];
 
     NSMutableDictionary *deviceDict = [NSMutableDictionary
-        dictionaryWithDictionary:@{
-        @"platform" : @"ios",
-        @"binary_version" : app_version,
-    }];
+                                       dictionaryWithDictionary:@{
+                                                                  @"platform" : @"ios",
+                                                                  @"binary_version" : app_version,
+                                                                  }];
 
     if (uuid != nil && ![uuid  isEqual: @""]) {
         deviceDict[@"snapshot"] = uuid;
     }
 
     NSDictionary *parameters = @{
-        @"device": deviceDict,
-        @"app_id": self.appId,
-        @"channel_tag": self.channel_tag
-    };
+                                 @"device": deviceDict,
+                                 @"app_id": self.appId,
+                                 @"channel_tag": self.channel_tag
+                                 };
 
     UNIHTTPJsonResponse *result = [[UNIRest postEntity:^(UNIBodyRequest *request) {
-      [request setUrl:url];
-      [request setHeaders:headers];
-      [request setBody:[NSJSONSerialization dataWithJSONObject:parameters options:0 error:nil]];
+        [request setUrl:url];
+        [request setHeaders:headers];
+        [request setBody:[NSJSONSerialization dataWithJSONObject:parameters options:0 error:nil]];
     }] asJson];
 
     NSLog(@"version is: %@", app_version);
@@ -472,7 +529,7 @@ static NSOperationQueue *delegateQueue;
     }
     @finally {
         NSLog(@"JSON Error: %@", jsonError);
-
+        
         if (jsonError != nil) {
             response.message = [NSString stringWithFormat:@"%@", [jsonError localizedDescription]];
             response.json = nil;

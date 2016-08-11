@@ -20,20 +20,28 @@ import org.json.JSONObject;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
+import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.File;
+import java.io.FileWriter;
+import java.io.FileReader;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
+import java.util.regex.Matcher;
 import java.net.URL;
+import java.net.URI;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.Iterator;
+import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 import java.util.zip.ZipInputStream;
@@ -43,7 +51,6 @@ class JsonHttpResponse {
   Boolean error;
   JSONObject json;
 }
-
 
 public class IonicDeploy extends CordovaPlugin {
   String server = "https://api.ionic.io";
@@ -56,6 +63,7 @@ public class IonicDeploy extends CordovaPlugin {
   boolean ignore_deploy = false;
   JSONObject last_update;
 
+  public static final String INDEX_UPDATED = "INDEX_UPDATED";
   public static final String NO_DEPLOY_LABEL = "NO_DEPLOY_LABEL";
   public static final String NO_DEPLOY_AVAILABLE = "NO_DEPLOY_AVAILABLE";
   public static final String NOTHING_TO_IGNORE = "NOTHING_TO_IGNORE";
@@ -64,14 +72,38 @@ public class IonicDeploy extends CordovaPlugin {
   public static final int VERSION_BEHIND = -1;
 
   /**
+   * Returns the data contained at filePath as a string
+   *
+   * @param filePath the URL of the file to read
+   * @return the string contents of filePath
+   **/
+  private static String getStringFromFile (String filePath) throws Exception {
+    // Grab the file and init vars
+    URI uri = URI.create(filePath);
+    File file = new File(uri);
+    StringBuilder text = new StringBuilder();
+    BufferedReader br = new BufferedReader(new FileReader(file));
+    String line;
+
+    //Read text from file
+    while ((line = br.readLine()) != null) {
+      text.append(line);
+      text.append('\n');
+    }
+    br.close();
+
+    return text.toString();
+  }
+
+  /**
    * Sets the context of the Command. This can then be used to do things like
    * get file paths associated with the Activity.
    *
    * @param cordova The context of the main Activity.
-   * @param webView The CordovaWebView Cordova is running in.
+   * @param cWebView The CordovaWebView Cordova is running in.
    */
-  public void initialize(CordovaInterface cordova, CordovaWebView webView) {
-    super.initialize(cordova, webView);
+  public void initialize(CordovaInterface cordova, CordovaWebView cWebView) {
+    super.initialize(cordova, cWebView);
     this.myContext = this.cordova.getActivity().getApplicationContext();
     this.prefs = getPreferences();
     this.v = webView;
@@ -633,9 +665,6 @@ public class IonicDeploy extends CordovaPlugin {
       ZipInputStream zipInputStream = new ZipInputStream(inputStream);
       ZipEntry zipEntry = null;
 
-      // Get the full path to the internal storage
-      String filesDir = this.myContext.getFilesDir().toString();
-
       // Make the version directory in internal storage
       File versionDir = this.myContext.getDir(location, Context.MODE_PRIVATE);
 
@@ -721,23 +750,92 @@ public class IonicDeploy extends CordovaPlugin {
     callbackContext.success("done");
   }
 
-
+  /**
+   * Updates the new index.html, sets the active UUID, and redirects the webview to a given UUID's deploy.
+   *
+   * @param uuid the UUID of the deploy to redirect to
+   * @param recreatePlugins deprecated, here be dragons
+   **/
   private void redirect(final String uuid, final boolean recreatePlugins) {
+    // TODO: get rid of recreatePlugins
     String ignore = this.prefs.getString("ionicdeploy_version_ignore", IonicDeploy.NOTHING_TO_IGNORE);
     if (!uuid.equals("") && !this.ignore_deploy && !uuid.equals(ignore)) {
       prefs.edit().putString("uuid", uuid).apply();
       final File versionDir = this.myContext.getDir(uuid, Context.MODE_PRIVATE);
-      final String deploy_url = versionDir.toURI() + "index.html";
 
-      cordova.getActivity().runOnUiThread(new Runnable() {
-        @Override
-        public void run() {
-          logMessage("REDIRECT", "Loading deploy version: " + uuid);
-          prefs.edit().putString("loaded_uuid", uuid).apply();
-          webView.loadUrlIntoView(deploy_url, recreatePlugins);
-        }
-      });
+      try {
+        // Parse new index as a string and update the cordova.js reference
+        File newIndexFile = new File(versionDir, "index.html");
+        final String indexLocation = newIndexFile.toURI().toString();
+        String newIndex = this.updateIndexCordovaReference(getStringFromFile(indexLocation));
+
+        // Create the file and directory, if need be 
+        versionDir.mkdirs();
+        newIndexFile.createNewFile();
+
+        // Save the new index.html
+        FileWriter fw = new FileWriter(newIndexFile);
+        fw.write(newIndex);
+        fw.close();
+
+        // Load in the new index.html
+        cordova.getActivity().runOnUiThread(new Runnable() {
+          @Override
+          public void run() {
+            logMessage("REDIRECT", "Loading deploy version: " + uuid);
+            prefs.edit().putString("loaded_uuid", uuid).apply();
+            webView.loadUrlIntoView(indexLocation, recreatePlugins);
+          }
+        });
+      } catch (Exception e) {
+        logMessage("REDIRECT", "Pre-redirect cordova injection exception: " + Log.getStackTraceString(e));
+      }
     }
+  }
+
+  /**
+   * Takes an index.html file parsed as a string and updates any extant references to cordova.js contained within to be 
+   * valid for deploy.
+   *
+   * @param indexStr the string contents of index.html
+   * @return the updated string index.html
+   **/
+  private static String updateIndexCordovaReference(String indexStr) {
+    // Init the new script
+    String newReference = "<script src=\"file:///android_asset/www/cordova.js\"></script>";
+
+    // Define regular expressions
+    String commentedRegexString = "<!--.*<script src=(\"|').*cordova\\.js.*(\"|')>.*</script>.*-->";  // Find commented cordova.js
+    String cordovaRegexString = "<script src=(\"|').*cordova\\.js.*(\"|')>.*</script>";  // Find cordova.js
+    String scriptRegexString = "<script.*>.*</script>";  // Find a script tag
+
+    // Compile the regexes
+    Pattern commentedRegex = Pattern.compile(commentedRegexString);
+    Pattern cordovaRegex = Pattern.compile(cordovaRegexString);
+    Pattern scriptRegex = Pattern.compile(scriptRegexString);
+
+    // First, make sure cordova.js isn't commented out.
+    if (commentedRegex.matcher(indexStr).find()) {
+      // It is, let's uncomment it.
+      indexStr = indexStr.replaceAll(commentedRegexString, newReference);
+    } else {
+      // It's either uncommented or missing
+      // First let's see if it's uncommented
+      if (cordovaRegex.matcher(indexStr).find()) {
+        // We found an extant cordova.js, update it
+        indexStr = indexStr.replaceAll(cordovaRegexString, newReference);
+      } else {
+        // No cordova.js, gotta inject it!
+        // First, find the first script tag we can
+        Matcher scriptMatcher = scriptRegex.matcher(indexStr);
+        if (scriptMatcher.find()) {
+          // Got the script, add cordova.js below it
+          String newScriptTag = String.format("%s\n%s\n", scriptMatcher.group(0), newReference);
+        }
+      }
+    }
+
+    return indexStr;
   }
 
   private class DownloadTask extends AsyncTask<String, Integer, String> {
