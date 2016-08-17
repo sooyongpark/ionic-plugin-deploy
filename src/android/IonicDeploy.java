@@ -286,6 +286,7 @@ public class IonicDeploy extends CordovaPlugin {
     String result = "{}";
     try {
       URL url = new URL(this.server + endpoint);
+      HttpURLConnection.setFollowRedirects(true);
       urlConnection = (HttpURLConnection) url.openConnection();
       InputStream in = new BufferedInputStream(urlConnection.getInputStream());
       result = readStream(in);
@@ -577,6 +578,7 @@ public class IonicDeploy extends CordovaPlugin {
       int postDataLength = postData.length;
 
       URL url = new URL(this.server + endpoint);
+      HttpURLConnection.setFollowRedirects(true);
       HttpURLConnection conn = (HttpURLConnection) url.openConnection();
 
       conn.setDoOutput(true);
@@ -854,6 +856,7 @@ public class IonicDeploy extends CordovaPlugin {
       HttpURLConnection connection = null;
       try {
         URL url = new URL(sUrl[0]);
+        HttpURLConnection.setFollowRedirects(true);
         connection = (HttpURLConnection) url.openConnection();
         connection.connect();
 
