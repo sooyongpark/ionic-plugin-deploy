@@ -860,8 +860,9 @@ public class IonicDeploy extends CordovaPlugin {
         // expect HTTP 200 OK, so we don't mistakenly save error report
         // instead of the file
         if (connection.getResponseCode() != HttpURLConnection.HTTP_OK) {
-          return "Server returned HTTP " + connection.getResponseCode()
-              + " " + connection.getResponseMessage();
+          String msg = "Server returned HTTP " + connection.getResponseCode() + " " + connection.getResponseMessage();
+          callbackContext.error(msg);
+          return msg;
         }
 
         // this will be useful to display download percentage
