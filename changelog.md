@@ -1,6 +1,10 @@
 Changelog
 =========
 
+## 0.6.1
+
+* (fix) Update `index.html` regexes to **only** target the `cordova.js`. Fixes #84
+
 ## 0.6.0
 
 * Ionic 2 support
