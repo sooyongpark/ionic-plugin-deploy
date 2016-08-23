@@ -3,7 +3,8 @@ Changelog
 
 ## 0.6.1
 
-* (fix) Update `index.html` regexes to **only** target the `cordova.js`. Fixes #84
+* (fix) Update `index.html` regexes to **only** target the `cordova.js`. PR #85
+* (fix) Use callback context when http requests don't return as expected. PR #82
 
 ## 0.6.0
 
