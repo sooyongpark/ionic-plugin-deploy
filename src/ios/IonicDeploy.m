@@ -402,7 +402,7 @@ static NSOperationQueue *delegateQueue;
 
                 // Ensure cordova.js isn't commented out
                 NSRegularExpression *commentedRegex = [NSRegularExpression
-                                                       regularExpressionWithPattern:@"<!--.*<script src=(\"|').*cordova\\.js.*(\"|')>.*</script>.*-->"
+                                                       regularExpressionWithPattern:@"<!--.*<script src=(\"|')(.*\\/|)cordova\\.js.*(\"|')>.*<\\/script>.*-->"
                                                        options:NSRegularExpressionCaseInsensitive
                                                        error:&error];
                 NSArray *matches = [commentedRegex
@@ -419,7 +419,7 @@ static NSOperationQueue *delegateQueue;
                     // We need to inject the script tag and/or update an existing one.
                     // First, find an existing cordova.js tag
                     NSRegularExpression *cordovaRegex = [NSRegularExpression
-                                                         regularExpressionWithPattern:@"<script src=(\"|').*cordova\\.js.*(\"|')>.*</script>"
+                                                         regularExpressionWithPattern:@"<script src=(\"|')(.*\\/|)cordova\\.js.*(\"|')>.*<\\/script>"
                                                          options:NSRegularExpressionCaseInsensitive
                                                          error:&error];
                     matches = [cordovaRegex matchesInString:htmlData options:0 range:NSMakeRange(0, [htmlData length])];
