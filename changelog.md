@@ -1,6 +1,10 @@
 Changelog
 =========
 
+## 0.6.2
+
+* (fix) Redirect after reloading webview. Fixes #86
+
 ## 0.6.1
 
 * (fix) Update `index.html` regexes to **only** target the `cordova.js`. PR #85
