@@ -1,6 +1,10 @@
 Changelog
 =========
 
+## 0.6.3
+
+* README update
+
 ## 0.6.2
 
 * (fix) Redirect after reloading webview. Fixes #86
