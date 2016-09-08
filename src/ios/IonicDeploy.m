@@ -231,7 +231,7 @@ static NSOperationQueue *delegateQueue;
             // Set the current version to the upstream version (we already have this version)
             [prefs setObject:upstream_uuid forKey:@"uuid"];
             [prefs synchronize];
-            [self.commandDelegate sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"false"] callbackId:self.callbackId];
+            [self.commandDelegate sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"true"] callbackId:self.callbackId];
         } else {
             NSDictionary *result = self.last_update;
             NSString *download_url = [result objectForKey:@"url"];
@@ -263,6 +263,7 @@ static NSOperationQueue *delegateQueue;
 
         if(upstream_uuid != nil && [self hasVersion:upstream_uuid]) {
             [self updateVersionLabel:NOTHING_TO_IGNORE];
+            [self setInitialLoad:YES];
             [self.commandDelegate sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"done"] callbackId:self.callbackId];
         } else {
             NSArray *paths = NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, YES);
