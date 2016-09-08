@@ -35,7 +35,7 @@ Changelog
 
 ## 0.5.5
 
-* Update `removeVersionFromPreferences`. Fixes #73
+* (fix) Update `removeVersionFromPreferences`. Fixes #73
 * Add support for `cordova-plugin-wkwebview-engine` - PR #66
 
 ## 0.5.4
@@ -52,9 +52,9 @@ Changelog
 
 ## 0.5.1
 
-* Added `shouldOverrideLoadWithRequest` function to address deploy persistence on `cordova-ios` versions `4.x`.  
+* (fix) Added `shouldOverrideLoadWithRequest` function to address deploy persistence on `cordova-ios` versions `4.x`.  
   Fixes #60
-* Fixed a compatible version check on iOS. Fixes #58
+* (fix) Fixed a compatible version check on iOS. Fixes #58
 
 ## 0.5.0
 
