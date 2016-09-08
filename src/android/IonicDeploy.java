@@ -407,7 +407,7 @@ public class IonicDeploy extends CordovaPlugin {
     if (upstream_uuid != "" && this.hasVersion(upstream_uuid)) {
       // Set the current version to the upstream uuid
       prefs.edit().putString("uuid", upstream_uuid).apply();
-      callbackContext.success("false");
+      callbackContext.success("true");
     } else {
       try {
           String url = this.last_update.getString("url");
@@ -658,6 +658,10 @@ public class IonicDeploy extends CordovaPlugin {
     logMessage("UNZIP", upstream_uuid);
 
     if (upstream_uuid != "" && this.hasVersion(upstream_uuid)) {
+      saveVersion(upstream_uuid);
+      this.ignore_deploy = false;
+      this.updateVersionLabel(IonicDeploy.NOTHING_TO_IGNORE);
+
       callbackContext.success("done"); // we have already extracted this version
       return;
     }
@@ -919,7 +923,6 @@ public class IonicDeploy extends CordovaPlugin {
       String uuid = prefs.getString("upstream_uuid", "");
 
       prefs.edit().putString("uuid", uuid).apply();
-
       callbackContext.success("true");
       return null;
     }
