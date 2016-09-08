@@ -49,6 +49,10 @@ static NSOperationQueue *delegateQueue;
     }
 
     [self initVersionChecks];
+
+    if([self checkInitialLoad]) {
+        [self doRedirect];
+    }
 }
 
 - (NSString *) getUUID {
@@ -103,11 +107,6 @@ static NSOperationQueue *delegateQueue;
             [prefs synchronize];
         }
     }
-}
-
-- (BOOL)shouldOverrideLoadWithRequest:(NSURLRequest*)request navigationType:(UIWebViewNavigationType)navigationType {
-    [self doRedirect];
-    return YES;
 }
 
 - (void) onReset {
@@ -280,8 +279,11 @@ static NSOperationQueue *delegateQueue;
             [self excludeVersionFromBackup:uuid];
             [self updateVersionLabel:NOTHING_TO_IGNORE];
             BOOL success = [[NSFileManager defaultManager] removeItemAtPath:filePath error:nil];
+
             NSLog(@"Unzipped...");
             NSLog(@"Removing www.zip %d", success);
+
+            [self setInitialLoad:YES];
         }
     });
 }
@@ -527,7 +529,7 @@ static NSOperationQueue *delegateQueue;
     }
     @finally {
         NSLog(@"JSON Error: %@", jsonError);
-        
+
         if (jsonError != nil) {
             response.message = [NSString stringWithFormat:@"%@", [jsonError localizedDescription]];
             response.json = nil;
@@ -660,6 +662,22 @@ static NSOperationQueue *delegateQueue;
         [prefs setObject:versions forKey:@"my_versions"];
         [prefs synchronize];
     }
+}
+
+- (void) setInitialLoad:(BOOL) load {
+    NSUserDefaults *prefs = [NSUserDefaults standardUserDefaults];
+    [prefs setBool:load forKey:@"should_redirect_on_init"];
+    [prefs synchronize];
+}
+
+-(BOOL) checkInitialLoad {
+    NSUserDefaults *prefs = [NSUserDefaults standardUserDefaults];
+    if ([prefs boolForKey:@"should_redirect_on_init"]) {
+        [self setInitialLoad:NO];
+        return YES;
+    }
+
+    return NO;
 }
 
 - (BOOL) excludeVersionFromBackup:(NSString *) uuid {

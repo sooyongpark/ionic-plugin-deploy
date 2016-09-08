@@ -1,6 +1,10 @@
 Changelog
 =========
 
+## 0.6.4
+
+* Remove `shouldOverrideLoadWithRequest`. Fixes #77
+
 ## 0.6.3
 
 * README update
