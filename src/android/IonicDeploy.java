@@ -658,7 +658,6 @@ public class IonicDeploy extends CordovaPlugin {
     logMessage("UNZIP", upstream_uuid);
 
     if (upstream_uuid != "" && this.hasVersion(upstream_uuid)) {
-      saveVersion(upstream_uuid);
       this.ignore_deploy = false;
       this.updateVersionLabel(IonicDeploy.NOTHING_TO_IGNORE);
 
