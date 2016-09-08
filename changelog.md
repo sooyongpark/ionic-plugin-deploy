@@ -4,6 +4,7 @@ Changelog
 ## 0.6.4
 
 * Remove `shouldOverrideLoadWithRequest`. Fixes #77
+* Update download/unzip for already loaded deploys. Fixes #67
 
 ## 0.6.3
 
