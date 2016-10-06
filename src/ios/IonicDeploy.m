@@ -4,6 +4,8 @@
 #import "SSZipArchive.h"
 #import "IonicConstant.h"
 #import <objc/message.h>
+#import <UIKit/UIKit.h>
+#import <WebKit/WebKit.h>
 
 typedef struct JsonHttpResponse {
     __unsafe_unretained NSString *message;
@@ -48,11 +50,45 @@ static NSOperationQueue *delegateQueue;
         self.version_label = NO_DEPLOY_LABEL;
     }
 
-    [self initVersionChecks];
-
-    if([self checkInitialLoad]) {
-        [self doRedirect];
+    NSString *uuid = [[NSUserDefaults standardUserDefaults] objectForKey:@"uuid"];
+    NSString *ignore = [prefs stringForKey:@"ionicdeploy_version_ignore"];
+    if (ignore == nil) {
+        ignore = NOTHING_TO_IGNORE;
     }
+
+    if (![uuid isEqualToString:@""] && !self.ignore_deploy && ![uuid isEqualToString:ignore]) {
+        if ( uuid != nil && ![self.currentUUID isEqualToString: uuid] ) {
+            // Get target index.html
+            NSArray *paths = NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, YES);
+            NSString *libraryDirectory = [paths objectAtIndex:0];
+            NSString *path = [NSString stringWithFormat:@"%@/%@/index.html", libraryDirectory, uuid];
+
+            SEL wkWebViewSelector = NSSelectorFromString(@"loadFileURL:allowingReadAccessToURL:");
+            if ([self.webView respondsToSelector:wkWebViewSelector]) {
+                // It's a WKWebview
+                [((WKWebView*)self.webView)
+                 evaluateJavaScript:@"window.location.href"
+                 completionHandler:^(NSString *result, NSError *error) {
+                     NSArray *indexSplit = [result componentsSeparatedByString:@"?"];
+                     NSString *currentIndex = [indexSplit objectAtIndex:0];
+                     if (![currentIndex isEqualToString:path]) {
+                         [self doRedirect];
+                     }
+                 }];
+
+            } else {
+                // It's a UIWebView
+                NSString *currentIndex = [((UIWebView*)self.webView) stringByEvaluatingJavaScriptFromString:@"window.location.href"];
+                NSArray *indexSplit = [currentIndex componentsSeparatedByString:@"?"];
+                currentIndex = [indexSplit objectAtIndex:0];
+                if (![currentIndex isEqualToString:path]) {
+                    [self doRedirect];
+                }
+            }
+        }
+    }
+
+    [self initVersionChecks];
 }
 
 - (NSString *) getUUID {
@@ -263,7 +299,6 @@ static NSOperationQueue *delegateQueue;
 
         if(upstream_uuid != nil && [self hasVersion:upstream_uuid]) {
             [self updateVersionLabel:NOTHING_TO_IGNORE];
-            [self setInitialLoad:YES];
             [self.commandDelegate sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"done"] callbackId:self.callbackId];
         } else {
             NSArray *paths = NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, YES);
@@ -283,8 +318,6 @@ static NSOperationQueue *delegateQueue;
 
             NSLog(@"Unzipped...");
             NSLog(@"Removing www.zip %d", success);
-
-            [self setInitialLoad:YES];
         }
     });
 }
@@ -663,22 +696,6 @@ static NSOperationQueue *delegateQueue;
         [prefs setObject:versions forKey:@"my_versions"];
         [prefs synchronize];
     }
-}
-
-- (void) setInitialLoad:(BOOL) load {
-    NSUserDefaults *prefs = [NSUserDefaults standardUserDefaults];
-    [prefs setBool:load forKey:@"should_redirect_on_init"];
-    [prefs synchronize];
-}
-
--(BOOL) checkInitialLoad {
-    NSUserDefaults *prefs = [NSUserDefaults standardUserDefaults];
-    if ([prefs boolForKey:@"should_redirect_on_init"]) {
-        [self setInitialLoad:NO];
-        return YES;
-    }
-
-    return NO;
 }
 
 - (BOOL) excludeVersionFromBackup:(NSString *) uuid {
