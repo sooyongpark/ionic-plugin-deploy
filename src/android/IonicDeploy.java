@@ -168,7 +168,7 @@ public class IonicDeploy extends CordovaPlugin {
 
       if(!IonicDeploy.NO_DEPLOY_AVAILABLE.equals(uuid)) {
         logMessage("LOAD", "Init Deploy Version");
-        this.redirect(uuid, false);
+        this.redirect(uuid);
       }
     }
     return null;
@@ -222,7 +222,7 @@ public class IonicDeploy extends CordovaPlugin {
       return true;
     } else if (action.equals("redirect")) {
       final String uuid = this.getUUID("");
-      this.redirect(uuid, true);
+      this.redirect(uuid);
       return true;
     } else if (action.equals("info")) {
       this.info(callbackContext);
@@ -759,9 +759,8 @@ public class IonicDeploy extends CordovaPlugin {
    * Updates the new index.html, sets the active UUID, and redirects the webview to a given UUID's deploy.
    *
    * @param uuid the UUID of the deploy to redirect to
-   * @param recreatePlugins deprecated, here be dragons
    **/
-  private void redirect(final String uuid, final boolean recreatePlugins) {
+  private void redirect(final String uuid) {
     // TODO: get rid of recreatePlugins
     String ignore = this.prefs.getString("ionicdeploy_version_ignore", IonicDeploy.NOTHING_TO_IGNORE);
     if (!uuid.equals("") && !this.ignore_deploy && !uuid.equals(ignore)) {
@@ -789,7 +788,7 @@ public class IonicDeploy extends CordovaPlugin {
           public void run() {
             logMessage("REDIRECT", "Loading deploy version: " + uuid);
             prefs.edit().putString("loaded_uuid", uuid).apply();
-            webView.loadUrlIntoView(indexLocation, recreatePlugins);
+            webView.loadUrlIntoView(indexLocation, false);
           }
         });
       } catch (Exception e) {
