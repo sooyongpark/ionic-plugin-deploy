@@ -1,6 +1,12 @@
 Changelog
 =========
 
+## 0.6.5
+
+* (fix) Rework initialization step on iOS. Fixes #94
+* (fix) Clear history on redirect on Android. Fixes #53
+* Clean up recreatePLugins variable - PR #91
+
 ## 0.6.4
 
 * (fix) Remove `shouldOverrideLoadWithRequest`. Fixes #77
