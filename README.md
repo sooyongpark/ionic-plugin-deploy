@@ -2,11 +2,11 @@
 
 The Cordova plugin for Ionic Deploy.
 
-Check out our [docs](http://docs.ionic.io/services/deploy/) for more detailed information.
+Check out our [docs](https://docs.ionic.io/services/deploy/) for more detailed information.
 
 ## Installation
 
-See our [docs](http://docs.ionic.io/services/deploy/) for installation steps.
+See our [docs](https://docs.ionic.io/services/deploy/) for installation steps.
 
 ## Cordova Plugin API
 
