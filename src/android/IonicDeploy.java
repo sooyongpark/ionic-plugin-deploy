@@ -388,7 +388,12 @@ public class IonicDeploy extends CordovaPlugin {
         }
 
         if(updatesAvailable && compatible) {
-          callbackContext.success("true");
+          // return json data
+          PluginResult result = new PluginResult(PluginResult.Status.OK, response.json);
+          result.setKeepCallback(true);
+          callbackContext.sendPluginResult(result);
+
+          //callbackContext.success("true");
         } else {
           callbackContext.success("false");
         }
